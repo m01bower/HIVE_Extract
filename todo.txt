@@ -1,0 +1,9 @@
+2. Run setup wizard:
+  python src/main.py --setup
+  2. This will guide you through:
+    - Entering Hive API key and User ID
+    - Setting up Google OAuth (credentials.json)
+    - Verifying spreadsheet access
+    - Configuring notification email
+  3. Run extracts:
+  python src/main.py
