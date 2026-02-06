@@ -1,6 +1,8 @@
 """Google Sheets service for HIVE_Extract."""
 
 import os
+import re
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Tuple
@@ -17,6 +19,31 @@ from logger_setup import get_logger
 logger = get_logger()
 
 
+def _clean_text(value: str) -> str:
+    """Clean text to remove encoding artifacts and normalize whitespace.
+
+    Fixes common issues like:
+    - Â appearing before spaces (UTF-8 encoding issues)
+    - Non-breaking spaces (U+00A0) → regular spaces
+    - Multiple spaces → single space
+    """
+    # Replace non-breaking spaces with regular spaces
+    text = value.replace('\u00a0', ' ')
+
+    # Remove Â that appears before/after spaces (common encoding artifact)
+    text = re.sub(r'Â\s', ' ', text)
+    text = re.sub(r'\sÂ', ' ', text)
+    text = text.replace('Â', '')
+
+    # Normalize Unicode (NFC form)
+    text = unicodedata.normalize('NFC', text)
+
+    # Collapse multiple spaces into one
+    text = re.sub(r' +', ' ', text)
+
+    return text.strip()
+
+
 class SheetsService:
     """Service for interacting with Google Sheets."""
 
@@ -29,12 +56,14 @@ class SheetsService:
         """
         self.spreadsheet_id = spreadsheet_id
         self._sheets_service: Optional[Resource] = None
-        self._gmail_service: Optional[Resource] = None
         self._credentials: Optional[Credentials] = None
 
     def authenticate(self) -> bool:
         """
         Authenticate with Google APIs using OAuth.
+
+        Opens a browser window for the user to sign in and authorize access.
+        Requires credentials.json in the config directory.
 
         Returns:
             True if authentication successful, False otherwise
@@ -51,24 +80,27 @@ class SheetsService:
             # If no valid credentials, initiate OAuth flow
             if not creds or not creds.valid:
                 if creds and creds.expired and creds.refresh_token:
+                    logger.info("Refreshing Google credentials...")
                     creds.refresh(Request())
                 else:
                     if not credentials_path.exists():
                         logger.error(f"credentials.json not found at {credentials_path}")
                         return False
 
+                    logger.info("Opening browser for Google sign-in...")
                     flow = InstalledAppFlow.from_client_secrets_file(
                         str(credentials_path), GOOGLE_SCOPES
                     )
                     creds = flow.run_local_server(port=0)
 
                 # Save the token for future use
+                token_path.parent.mkdir(parents=True, exist_ok=True)
                 with open(token_path, "w") as token:
                     token.write(creds.to_json())
+                logger.info("Saved Google credentials")
 
             self._credentials = creds
             self._sheets_service = build("sheets", "v4", credentials=creds)
-            self._gmail_service = build("gmail", "v1", credentials=creds)
 
             logger.info("Successfully authenticated with Google APIs")
             return True
@@ -83,13 +115,6 @@ class SheetsService:
         if not self._sheets_service:
             raise RuntimeError("Not authenticated. Call authenticate() first.")
         return self._sheets_service
-
-    @property
-    def gmail(self) -> Resource:
-        """Get the Gmail API service."""
-        if not self._gmail_service:
-            raise RuntimeError("Not authenticated. Call authenticate() first.")
-        return self._gmail_service
 
     def verify_tabs_exist(self) -> Tuple[bool, List[str]]:
         """
@@ -159,6 +184,22 @@ class SheetsService:
             logger.error(f"Failed to clear tab {tab_name}: {e}")
             return False
 
+    @staticmethod
+    def _to_cell_value(val: Any) -> Any:
+        """Convert a value to a Sheets-compatible cell value and clean text."""
+        if val is None:
+            return ""
+        if isinstance(val, (int, float, bool)):
+            return val
+        if isinstance(val, str):
+            return _clean_text(val)
+        if isinstance(val, list):
+            joined = ", ".join(str(v) for v in val if v) if val else ""
+            return _clean_text(joined)
+        if isinstance(val, dict):
+            return _clean_text(str(val))
+        return _clean_text(str(val))
+
     def write_data(
         self,
         tab_name: str,
@@ -188,10 +229,10 @@ class SheetsService:
             # Get headers from the first data item
             headers = list(data[0].keys())
 
-            # Prepare data rows
+            # Prepare data rows - convert all values to Sheets-compatible types
             rows = []
             for item in data:
-                row = [item.get(h, "") for h in headers]
+                row = [self._to_cell_value(item.get(h, "")) for h in headers]
                 rows.append(row)
 
             # Write headers if requested
@@ -204,7 +245,7 @@ class SheetsService:
                     body={"values": [headers]},
                 ).execute()
 
-            # Write data
+            # Write data - use RAW to insert values only, no formatting
             data_range = f"'{tab_name}'!A{data_start_row}"
             self.sheets.spreadsheets().values().update(
                 spreadsheetId=self.spreadsheet_id,

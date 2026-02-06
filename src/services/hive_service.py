@@ -1,16 +1,49 @@
-"""Hive API client using GraphQL."""
+"""Hive API client using REST (projects) and GraphQL (timesheets)."""
 
+import csv
+import io
+import re
 import requests
-from datetime import datetime, date
+from datetime import date
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass
 import time
+import unicodedata
 
 from logger_setup import get_logger
+from config import HIVE_API_BASE_URL, HIVE_GRAPHQL_URL
 
 logger = get_logger()
 
-HIVE_API_URL = "https://app.hive.com/api/v1/graphql"
+
+def clean_text(value: Any) -> Any:
+    """Clean text values to remove encoding artifacts and normalize whitespace.
+
+    Fixes common issues like:
+    - Â appearing before spaces (UTF-8 encoding issues)
+    - Non-breaking spaces (U+00A0) → regular spaces
+    - Multiple spaces → single space
+    - Other Unicode control characters
+    """
+    if not isinstance(value, str):
+        return value
+
+    # Replace non-breaking spaces with regular spaces
+    text = value.replace('\u00a0', ' ')
+
+    # Remove Â that appears before spaces (common encoding artifact)
+    text = re.sub(r'Â\s', ' ', text)
+    text = re.sub(r'\sÂ', ' ', text)
+    text = text.replace('Â', '')
+
+    # Normalize Unicode (NFC form)
+    text = unicodedata.normalize('NFC', text)
+
+    # Collapse multiple spaces into one
+    text = re.sub(r' +', ' ', text)
+
+    # Strip leading/trailing whitespace
+    return text.strip()
 
 
 @dataclass
@@ -19,27 +52,58 @@ class HiveCredentials:
 
     api_key: str
     user_id: str
+    workspace_id: str = ""
 
 
 class HiveService:
-    """Service for interacting with Hive's GraphQL API."""
+    """Service for interacting with Hive's REST and GraphQL APIs."""
 
     def __init__(self, credentials: HiveCredentials):
-        """
-        Initialize the Hive service.
-
-        Args:
-            credentials: Hive API credentials
-        """
         self.credentials = credentials
         self.session = requests.Session()
         self.session.headers.update(
             {
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {credentials.api_key}",
+                "api_key": credentials.api_key,
             }
         )
-        self._workspace_id: Optional[str] = None
+        # Cached lookups — loaded once per session
+        self._user_lookup: Optional[Dict[str, Dict[str, str]]] = None
+
+    # ------------------------------------------------------------------
+    # Low-level helpers
+    # ------------------------------------------------------------------
+
+    def _rest_get(
+        self,
+        path: str,
+        params: Optional[Dict[str, Any]] = None,
+        retries: int = 3,
+        retry_delay: float = 1.0,
+    ) -> Any:
+        url = f"{HIVE_API_BASE_URL}{path}"
+        if params is None:
+            params = {}
+        params["user_id"] = self.credentials.user_id
+        params["api_key"] = self.credentials.api_key
+
+        last_error = None
+        for attempt in range(retries):
+            try:
+                response = self.session.get(url, params=params, timeout=60)
+                response.raise_for_status()
+                return response.json()
+            except requests.exceptions.RequestException as e:
+                last_error = e
+                logger.warning(
+                    f"REST API request failed (attempt {attempt + 1}/{retries}): {e}"
+                )
+                if attempt < retries - 1:
+                    time.sleep(retry_delay * (attempt + 1))
+
+        raise Exception(
+            f"REST API request failed after {retries} attempts: {last_error}"
+        )
 
     def _execute_query(
         self,
@@ -48,376 +112,435 @@ class HiveService:
         retries: int = 3,
         retry_delay: float = 1.0,
     ) -> Dict[str, Any]:
-        """
-        Execute a GraphQL query against the Hive API.
-
-        Args:
-            query: GraphQL query string
-            variables: Optional query variables
-            retries: Number of retry attempts
-            retry_delay: Delay between retries in seconds
-
-        Returns:
-            Query result data
-
-        Raises:
-            Exception: If query fails after retries
-        """
-        payload = {"query": query}
+        payload: Dict[str, Any] = {"query": query}
         if variables:
             payload["variables"] = variables
+
+        graphql_headers = {"user_id": self.credentials.user_id}
 
         last_error = None
         for attempt in range(retries):
             try:
-                response = self.session.post(HIVE_API_URL, json=payload, timeout=60)
+                response = self.session.post(
+                    HIVE_GRAPHQL_URL,
+                    json=payload,
+                    headers=graphql_headers,
+                    timeout=120,
+                )
                 response.raise_for_status()
-
                 result = response.json()
-
                 if "errors" in result:
-                    error_messages = [e.get("message", str(e)) for e in result["errors"]]
-                    raise Exception(f"GraphQL errors: {'; '.join(error_messages)}")
-
+                    msgs = [e.get("message", str(e)) for e in result["errors"]]
+                    raise Exception(f"GraphQL errors: {'; '.join(msgs)}")
                 return result.get("data", {})
-
             except requests.exceptions.RequestException as e:
                 last_error = e
-                logger.warning(f"Hive API request failed (attempt {attempt + 1}/{retries}): {e}")
+                logger.warning(
+                    f"GraphQL request failed (attempt {attempt + 1}/{retries}): {e}"
+                )
                 if attempt < retries - 1:
                     time.sleep(retry_delay * (attempt + 1))
 
-        raise Exception(f"Hive API request failed after {retries} attempts: {last_error}")
+        raise Exception(
+            f"GraphQL request failed after {retries} attempts: {last_error}"
+        )
+
+    # ------------------------------------------------------------------
+    # Connection / workspace helpers
+    # ------------------------------------------------------------------
 
     def test_connection(self) -> bool:
-        """
-        Test the Hive API connection.
-
-        Returns:
-            True if connection successful, False otherwise
-        """
         try:
-            query = """
-            query {
-                workspaces {
-                    id
-                    name
-                }
-            }
-            """
-            result = self._execute_query(query)
-            workspaces = result.get("workspaces", [])
-
-            if workspaces:
-                self._workspace_id = workspaces[0].get("id")
-                logger.info(f"Connected to Hive workspace: {workspaces[0].get('name')}")
-                return True
-
-            logger.error("No workspaces found")
-            return False
-
+            self._rest_get("/testcredentials")
+            logger.info(
+                f"Hive API connection verified for user: {self.credentials.user_id}"
+            )
+            return True
         except Exception as e:
             logger.error(f"Failed to connect to Hive: {e}")
             return False
 
-    def get_workspace_id(self) -> Optional[str]:
-        """Get the current workspace ID."""
-        if not self._workspace_id:
-            self.test_connection()
-        return self._workspace_id
+    def get_workspaces(self) -> List[Dict[str, Any]]:
+        try:
+            result = self._rest_get("/workspaces")
+            if isinstance(result, list):
+                return result
+            return result.get("workspaces", result.get("data", []))
+        except Exception as e:
+            logger.error(f"Failed to fetch workspaces: {e}")
+            return []
+
+    def get_workspace_users(self) -> Dict[str, Dict[str, str]]:
+        """Fetch workspace users — cached after first call."""
+        if self._user_lookup is not None:
+            return self._user_lookup
+
+        workspace_id = self.credentials.workspace_id
+        if not workspace_id:
+            return {}
+
+        try:
+            users = self._rest_get(f"/workspaces/{workspace_id}/users")
+            if not isinstance(users, list):
+                users = users.get("data", users.get("users", []))
+
+            lookup = {}
+            for u in users:
+                uid = u.get("id", "")
+                profile = u.get("profile", {})
+                lookup[uid] = {
+                    "fullName": u.get("fullName", ""),
+                    "email": u.get("email", ""),
+                    "firstName": profile.get("firstName", u.get("firstName", "")),
+                    "lastName": profile.get("lastName", u.get("lastName", "")),
+                }
+            logger.info(f"Loaded {len(lookup)} workspace users")
+            self._user_lookup = lookup
+            return lookup
+        except Exception as e:
+            logger.warning(f"Could not fetch workspace users: {e}")
+            return {}
+
+    # ------------------------------------------------------------------
+    # Utility
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _fmt_date(val: Any) -> str:
+        """Strip the time portion from an ISO datetime string."""
+        if not val:
+            return ""
+        if isinstance(val, str) and "T" in val:
+            return val.split("T")[0]
+        return str(val)
+
+    @staticmethod
+    def _minutes_to_hhmm(minutes: int) -> str:
+        """Convert integer minutes to HH:mm string."""
+        if not minutes:
+            return "0:00"
+        h = minutes // 60
+        m = minutes % 60
+        return f"{h}:{m:02d}"
+
+    @staticmethod
+    def _extract_custom_field(cf: Dict[str, Any]) -> Any:
+        """Extract the display value from a Hive custom field dict."""
+        cf_type = cf.get("type", "")
+        if cf_type == "date":
+            return HiveService._fmt_date(cf.get("dateValue", ""))
+        elif cf_type == "number":
+            return cf.get("numberValue", "")
+        elif cf_type == "select":
+            sv = cf.get("selectedValues", [])
+            return sv[0] if sv else ""
+        else:  # text, url, etc.
+            return cf.get("value", "")
+
+    # ------------------------------------------------------------------
+    # BillingProject_RAW  /  BillingProject_RAW_Archive
+    # ------------------------------------------------------------------
 
     def get_projects(self, archived: bool = False) -> List[Dict[str, Any]]:
+        """Fetch projects formatted for BillingProject_RAW export."""
+        workspace_id = self.credentials.workspace_id
+        if not workspace_id:
+            raise ValueError("workspace_id is required to fetch projects")
+
+        logger.info(
+            f"Fetching {'archived' if archived else 'active'} projects from Hive"
+        )
+
+        params = {"filters[archived]": "true" if archived else "false"}
+        result = self._rest_get(
+            f"/workspaces/{workspace_id}/projects", params=params
+        )
+
+        if isinstance(result, list):
+            projects_list = result
+        else:
+            projects_list = result.get("data", result.get("projects", []))
+
+        user_lookup = self.get_workspace_users()
+        flattened = [
+            self._flatten_project(p, user_lookup, archived)
+            for p in projects_list
+        ]
+        logger.info(
+            f"Retrieved {len(flattened)} {'archived' if archived else 'active'} projects"
+        )
+        return flattened
+
+    def _flatten_project(
+        self,
+        project: Dict[str, Any],
+        user_lookup: Dict[str, Dict[str, str]],
+        archived: bool = False,
+    ) -> Dict[str, Any]:
+        """Flatten a project to match BillingProject_RAW column format.
+
+        Standard fields first, then all custom fields dynamically so any
+        new custom fields Hive adds automatically become new columns.
         """
-        Fetch projects from Hive.
+        # Resolve member names
+        member_ids = project.get("members", [])
+        owner_ids = project.get("ownerIds", [])
+        all_ids = list(dict.fromkeys(owner_ids + member_ids))  # dedup, preserve order
+        member_names = [
+            user_lookup.get(uid, {}).get("fullName", uid) for uid in all_ids
+        ]
+        if project.get("sharingType") == "everyone":
+            member_names.append("All members")
+        if project.get("accessOption") == "public" and "All members" not in member_names:
+            member_names.append("Public project")
 
-        Args:
-            archived: If True, fetch archived projects; if False, fetch active projects
-
-        Returns:
-            List of project dictionaries
-        """
-        logger.info(f"Fetching {'archived' if archived else 'active'} projects from Hive")
-
-        all_projects = []
-        cursor = None
-        page_size = 100
-
-        query = """
-        query GetProjects($first: Int, $after: String, $archived: Boolean) {
-            projects(first: $first, after: $after, archived: $archived) {
-                edges {
-                    node {
-                        id
-                        name
-                        description
-                        status
-                        createdAt
-                        updatedAt
-                        archived
-                        color
-                        budget
-                        budgetSpent
-                        client {
-                            id
-                            name
-                        }
-                        owner {
-                            id
-                            name
-                            email
-                        }
-                    }
-                    cursor
-                }
-                pageInfo {
-                    hasNextPage
-                    endCursor
-                }
-            }
+        row: Dict[str, Any] = {
+            "Project name": project.get("name", ""),
+            "Members": ", ".join(member_names),
         }
-        """
 
-        while True:
-            variables = {
-                "first": page_size,
-                "archived": archived,
-            }
-            if cursor:
-                variables["after"] = cursor
+        if archived:
+            row["Archived at"] = self._fmt_date(project.get("modifiedAt", ""))
 
-            result = self._execute_query(query, variables)
-            projects_data = result.get("projects", {})
-            edges = projects_data.get("edges", [])
+        row["Status"] = project.get("status", "")
+        row["Start Date"] = self._fmt_date(project.get("startDate", ""))
+        row["End Date"] = self._fmt_date(project.get("endDate", ""))
+        row["Project ID"] = project.get("simpleId", "")
 
-            for edge in edges:
-                node = edge.get("node", {})
-                all_projects.append(self._flatten_project(node))
+        # Custom fields — add dynamically so new ones auto-appear
+        for cf in project.get("projectCustomFields", []):
+            label = cf.get("label", "")
+            if not label or cf.get("hidden", False):
+                continue
+            row[label] = self._extract_custom_field(cf)
 
-            page_info = projects_data.get("pageInfo", {})
-            if not page_info.get("hasNextPage", False):
-                break
+        return row
 
-            cursor = page_info.get("endCursor")
-
-        logger.info(f"Retrieved {len(all_projects)} {'archived' if archived else 'active'} projects")
-        return all_projects
-
-    def _flatten_project(self, project: Dict[str, Any]) -> Dict[str, Any]:
-        """Flatten nested project data for spreadsheet export."""
-        client = project.get("client") or {}
-        owner = project.get("owner") or {}
-
-        return {
-            "Project ID": project.get("id", ""),
-            "Project Name": project.get("name", ""),
-            "Description": project.get("description", ""),
-            "Status": project.get("status", ""),
-            "Created At": project.get("createdAt", ""),
-            "Updated At": project.get("updatedAt", ""),
-            "Archived": project.get("archived", False),
-            "Color": project.get("color", ""),
-            "Budget": project.get("budget", ""),
-            "Budget Spent": project.get("budgetSpent", ""),
-            "Client ID": client.get("id", ""),
-            "Client Name": client.get("name", ""),
-            "Owner ID": owner.get("id", ""),
-            "Owner Name": owner.get("name", ""),
-            "Owner Email": owner.get("email", ""),
-        }
+    # ------------------------------------------------------------------
+    # MonthEXACT_RAW  —  detailed time tracking entries
+    # ------------------------------------------------------------------
 
     def get_time_entries(
         self,
         from_date: date,
         to_date: date,
     ) -> List[Dict[str, Any]]:
-        """
-        Fetch time tracking entries for a date range.
+        """Fetch time tracking entries formatted for MonthEXACT_RAW.
 
-        Args:
-            from_date: Start date
-            to_date: End date
-
-        Returns:
-            List of time entry dictionaries
+        Columns: Project, Parent Project, Time Tracked By, Action Title,
+        Time Tracked Date, Tracked (Minutes), Tracked (HH:mm),
+        Estimated (Minutes), Estimated (HH:mm), Description, Labels
         """
         logger.info(f"Fetching time entries from {from_date} to {to_date}")
 
-        all_entries = []
-        cursor = None
-        page_size = 100
+        workspace_id = self.credentials.workspace_id
+        if not workspace_id:
+            raise ValueError("workspace_id is required to fetch time entries")
+
+        user_lookup = self.get_workspace_users()
 
         query = """
-        query GetTimeEntries($first: Int, $after: String, $from: Date, $to: Date) {
-            timesheetEntries(first: $first, after: $after, from: $from, to: $to) {
-                edges {
-                    node {
-                        id
-                        date
-                        hours
-                        minutes
-                        description
-                        billable
-                        approved
-                        createdAt
-                        updatedAt
-                        user {
-                            id
-                            name
-                            email
-                        }
-                        project {
-                            id
-                            name
-                        }
-                        action {
-                            id
-                            title
-                        }
-                    }
-                    cursor
+        query GetTimeTrackingData($workspaceId: ID!, $startDate: Date, $endDate: Date) {
+          getTimeTrackingData(workspaceId: $workspaceId, startDate: $startDate, endDate: $endDate) {
+            actions {
+              _id
+              title
+              project {
+                _id
+                name
+                parentProject
+              }
+              labels
+              timeTracking {
+                actualList {
+                  id
+                  userId
+                  time
+                  date
+                  description
+                  automated
+                  categoryId
                 }
-                pageInfo {
-                    hasNextPage
-                    endCursor
-                }
+                estimate
+              }
             }
+            projects {
+              _id
+              name
+              parentProject
+            }
+          }
         }
         """
 
-        while True:
-            variables = {
-                "first": page_size,
-                "from": from_date.isoformat(),
-                "to": to_date.isoformat(),
-            }
-            if cursor:
-                variables["after"] = cursor
+        variables = {
+            "workspaceId": workspace_id,
+            "startDate": from_date.isoformat(),
+            "endDate": to_date.isoformat(),
+        }
 
-            result = self._execute_query(query, variables)
-            entries_data = result.get("timesheetEntries", {})
-            edges = entries_data.get("edges", [])
+        result = self._execute_query(query, variables)
+        ttd = result.get("getTimeTrackingData", {})
+        actions = ttd.get("actions", [])
 
-            for edge in edges:
-                node = edge.get("node", {})
-                all_entries.append(self._flatten_time_entry(node))
+        # Build project-id → name lookup (including parent resolution)
+        project_name_lookup: Dict[str, str] = {}
+        project_parent_lookup: Dict[str, str] = {}
+        for p in ttd.get("projects", []):
+            pid = p.get("_id", "")
+            project_name_lookup[pid] = p.get("name", "")
+            pp = p.get("parentProject")
+            if pp:
+                project_parent_lookup[pid] = pp
 
-            page_info = entries_data.get("pageInfo", {})
-            if not page_info.get("hasNextPage", False):
-                break
+        def resolve_parent(project_id: str) -> str:
+            parent_id = project_parent_lookup.get(project_id, "")
+            if parent_id:
+                return project_name_lookup.get(parent_id, "")
+            return ""
 
-            cursor = page_info.get("endCursor")
+        all_entries: List[Dict[str, Any]] = []
+        for action in actions:
+            tracking = action.get("timeTracking") or {}
+            actual_list = tracking.get("actualList") or []
+            if not actual_list:
+                continue
+
+            project = action.get("project") or {}
+            project_id = project.get("_id", "")
+            project_name = project.get("name", "")
+
+            # Resolve parent project name
+            parent_project_id = project.get("parentProject", "")
+            parent_name = project_name_lookup.get(parent_project_id, "") if parent_project_id else ""
+
+            action_title = action.get("title", "")
+
+            # Labels (returned as IDs — include as-is for now)
+            labels_list = action.get("labels") or []
+            labels_str = ", ".join(str(l) for l in labels_list) if labels_list else ""
+
+            # Overall estimate in seconds
+            overall_estimate = tracking.get("estimate", 0) or 0
+
+            for entry in actual_list:
+                uid = entry.get("userId", "")
+                user_info = user_lookup.get(uid, {})
+
+                time_seconds = entry.get("time", 0) or 0
+                tracked_minutes = round(time_seconds / 60)
+
+                est_minutes = round(overall_estimate / 60) if overall_estimate else 0
+
+                raw_date = entry.get("date", "")
+                if isinstance(raw_date, str) and "T" in raw_date:
+                    raw_date = raw_date.split("T")[0]
+
+                row: Dict[str, Any] = {
+                    "Project": project_name,
+                    "Parent Project": parent_name,
+                    "Time Tracked By": user_info.get("fullName", ""),
+                    "Action Title": action_title,
+                    "Time Tracked Date": raw_date,
+                    "Tracked (Minutes)": tracked_minutes,
+                    "Tracked (HH:mm)": self._minutes_to_hhmm(tracked_minutes),
+                    "Estimated (Minutes)": est_minutes,
+                    "Estimated (HH:mm)": self._minutes_to_hhmm(est_minutes),
+                    "Description": entry.get("description", ""),
+                    "Labels": labels_str,
+                }
+
+                # Include any extra fields from the entry dynamically
+                for k, v in entry.items():
+                    if k not in ("id", "userId", "time", "date", "description", "automated", "categoryId"):
+                        row.setdefault(k, v)
+
+                all_entries.append(row)
 
         logger.info(f"Retrieved {len(all_entries)} time entries")
         return all_entries
 
-    def _flatten_time_entry(self, entry: Dict[str, Any]) -> Dict[str, Any]:
-        """Flatten nested time entry data for spreadsheet export."""
-        user = entry.get("user") or {}
-        project = entry.get("project") or {}
-        action = entry.get("action") or {}
+    # ------------------------------------------------------------------
+    # Month_RAW / Year_RAW / ALL_YYYY  —  timesheet reporting CSV
+    # ------------------------------------------------------------------
 
-        hours = entry.get("hours", 0) or 0
-        minutes = entry.get("minutes", 0) or 0
-        total_hours = hours + (minutes / 60)
-
-        return {
-            "Entry ID": entry.get("id", ""),
-            "Date": entry.get("date", ""),
-            "Hours": hours,
-            "Minutes": minutes,
-            "Total Hours": round(total_hours, 2),
-            "Description": entry.get("description", ""),
-            "Billable": entry.get("billable", False),
-            "Approved": entry.get("approved", False),
-            "Created At": entry.get("createdAt", ""),
-            "Updated At": entry.get("updatedAt", ""),
-            "User ID": user.get("id", ""),
-            "User Name": user.get("name", ""),
-            "User Email": user.get("email", ""),
-            "Project ID": project.get("id", ""),
-            "Project Name": project.get("name", ""),
-            "Action ID": action.get("id", ""),
-            "Action Title": action.get("title", ""),
-        }
-
-    def get_time_report(
+    def _fetch_timesheet_csv_string(
         self,
         from_date: date,
         to_date: date,
-        include_archived_projects: bool = True,
-        include_projects_without_time: bool = False,
+    ) -> str:
+        """Fetch the raw CSV string from Hive's timesheet reporting API."""
+        logger.info(f"Fetching timesheet report CSV from {from_date} to {to_date}")
+
+        workspace_id = self.credentials.workspace_id
+        if not workspace_id:
+            raise ValueError("workspace_id is required")
+
+        query = """
+        query GetReportCsv($workspaceId: ID!, $startDate: Date!, $endDate: Date!) {
+          getTimesheetReportingCsvExportData(
+            workspaceId: $workspaceId,
+            startDate: $startDate,
+            endDate: $endDate
+          )
+        }
+        """
+
+        variables = {
+            "workspaceId": workspace_id,
+            "startDate": from_date.isoformat(),
+            "endDate": to_date.isoformat(),
+        }
+
+        result = self._execute_query(query, variables)
+        csv_string = result.get("getTimesheetReportingCsvExportData", "")
+
+        if not csv_string:
+            logger.warning("Timesheet report CSV returned empty")
+            return ""
+
+        row_count = max(len(csv_string.strip().split("\n")) - 1, 0)
+        logger.info(f"Retrieved {row_count} timesheet report rows")
+        return csv_string
+
+    def get_timesheet_report_csv(
+        self,
+        from_date: date,
+        to_date: date,
     ) -> List[Dict[str, Any]]:
-        """
-        Fetch time reporting data (aggregated by project/user).
+        """Fetch timesheet reporting data as parsed dicts."""
+        csv_string = self._fetch_timesheet_csv_string(from_date, to_date)
+        if not csv_string:
+            return []
+        reader = csv.DictReader(io.StringIO(csv_string))
+        return list(reader)
 
-        Args:
-            from_date: Start date
-            to_date: End date
-            include_archived_projects: Include archived projects
-            include_projects_without_time: Include projects with no time logged
+    def get_timesheet_report_csv_raw(
+        self,
+        from_date: date,
+        to_date: date,
+    ) -> str:
+        """Fetch timesheet reporting data as a raw CSV string (written directly to file)."""
+        return self._fetch_timesheet_csv_string(from_date, to_date)
 
-        Returns:
-            List of time report dictionaries
-        """
-        logger.info(f"Fetching time report from {from_date} to {to_date}")
-
-        # Time reports may use a different query structure
-        # For now, we aggregate time entries
-        entries = self.get_time_entries(from_date, to_date)
-
-        # Aggregate by user and project
-        aggregated: Dict[str, Dict[str, Any]] = {}
-
-        for entry in entries:
-            key = f"{entry['User ID']}_{entry['Project ID']}"
-
-            if key not in aggregated:
-                aggregated[key] = {
-                    "User ID": entry["User ID"],
-                    "User Name": entry["User Name"],
-                    "User Email": entry["User Email"],
-                    "Project ID": entry["Project ID"],
-                    "Project Name": entry["Project Name"],
-                    "Total Hours": 0,
-                    "Billable Hours": 0,
-                    "Non-Billable Hours": 0,
-                    "Entry Count": 0,
-                }
-
-            aggregated[key]["Total Hours"] += entry["Total Hours"]
-            aggregated[key]["Entry Count"] += 1
-
-            if entry["Billable"]:
-                aggregated[key]["Billable Hours"] += entry["Total Hours"]
-            else:
-                aggregated[key]["Non-Billable Hours"] += entry["Total Hours"]
-
-        # Round the hours
-        for item in aggregated.values():
-            item["Total Hours"] = round(item["Total Hours"], 2)
-            item["Billable Hours"] = round(item["Billable Hours"], 2)
-            item["Non-Billable Hours"] = round(item["Non-Billable Hours"], 2)
-
-        result = list(aggregated.values())
-        logger.info(f"Generated time report with {len(result)} entries")
-        return result
-
-    def get_year_time_entries(self, year: int) -> List[Dict[str, Any]]:
-        """
-        Fetch all time entries for a specific year.
-
-        Args:
-            year: The year to fetch
-
-        Returns:
-            List of time entry dictionaries
-        """
+    def get_year_timesheet_report(self, year: int) -> List[Dict[str, Any]]:
+        """Fetch timesheet report for an entire year as parsed dicts."""
         from_date = date(year, 1, 1)
         to_date = date(year, 12, 31)
 
-        # Cap to_date at today if year is current year
         today = date.today()
         if to_date > today:
             to_date = today
 
-        return self.get_time_entries(from_date, to_date)
+        return self.get_timesheet_report_csv(from_date, to_date)
+
+    def get_year_timesheet_report_raw(self, year: int) -> str:
+        """Fetch timesheet report for an entire year as raw CSV string."""
+        from_date = date(year, 1, 1)
+        to_date = date(year, 12, 31)
+
+        today = date.today()
+        if to_date > today:
+            to_date = today
+
+        return self.get_timesheet_report_csv_raw(from_date, to_date)

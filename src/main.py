@@ -1,23 +1,155 @@
-"""Main entry point for HIVE_Extract."""
+"""Main entry point for HIVE_Extract — pulls Hive data into Excel files."""
 
+import calendar
+import csv
+import io
 import sys
 import argparse
+import time
 from datetime import date
-from typing import Dict, Optional, Tuple
+from pathlib import Path
+from typing import Dict, List, Any, Optional
 
-from config import TABS, YEAR_TABS, SPREADSHEET_ID
+import re
+
+from openpyxl import Workbook
+
+from config import EXTRACTS, YEAR_EXTRACTS, OUTPUT_DIR, TABS, YEAR_TABS
 from settings import (
     AppSettings,
     load_settings,
     save_settings,
     ensure_config_dir,
-    get_credentials_path,
 )
 from logger_setup import setup_logger, get_logger
-from notification import send_notification, send_error_notification
 from services.hive_service import HiveService, HiveCredentials
 from services.sheets_service import SheetsService
 from gui.date_picker import select_date_range
+
+
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _typed_value(val):
+    """Convert a value to a native Python type so Excel stores it properly.
+
+    - date strings  (YYYY-MM-DD)  → datetime.date
+    - integer strings              → int
+    - decimal strings              → float
+    - percentages like "1.39%"     → float  (as 0.0139 so Excel % format works)
+    - None / list / dict           → safe string
+    - everything else              → unchanged
+    """
+    if val is None:
+        return ""
+    if isinstance(val, (int, float, date)):
+        return val
+    if isinstance(val, list):
+        return ", ".join(str(v) for v in val if v) if val else ""
+    if isinstance(val, dict):
+        return str(val)
+    if isinstance(val, str):
+        s = val.strip()
+        if not s:
+            return ""
+        # Date: YYYY-MM-DD
+        if _DATE_RE.match(s):
+            try:
+                return date.fromisoformat(s)
+            except ValueError:
+                pass
+        # Percentage: "1.39%"
+        if s.endswith("%"):
+            try:
+                return float(s[:-1]) / 100.0
+            except ValueError:
+                pass
+        # Number (allow commas as thousands separators, e.g. "221,500")
+        stripped = s.replace(",", "")
+        try:
+            return int(stripped)
+        except ValueError:
+            pass
+        try:
+            return float(stripped)
+        except ValueError:
+            pass
+    return val
+
+
+def write_excel_file(filepath: Path, data: List[Dict[str, Any]]) -> int:
+    """
+    Write a list of dicts to an Excel file.
+
+    Returns:
+        Number of rows written
+    """
+    if not data:
+        return 0
+
+    wb = Workbook()
+    ws = wb.active
+
+    # Collect all unique headers across ALL rows, preserving first-seen order.
+    seen = set()
+    headers = []
+    for row in data:
+        for key in row.keys():
+            if key not in seen:
+                seen.add(key)
+                headers.append(key)
+
+    ws.append(headers)
+
+    for row in data:
+        ws.append([_typed_value(row.get(h, "")) for h in headers])
+
+    filepath.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(str(filepath))
+    return len(data)
+
+
+def write_excel_from_csv(
+    filepath: Path,
+    csv_string: str,
+    from_date: date,
+    to_date: date,
+) -> int:
+    """
+    Parse a raw CSV string from Hive, filter rows to the date range,
+    and write to an Excel file.
+
+    Returns:
+        Number of data rows written
+    """
+    if not csv_string:
+        return 0
+
+    reader = csv.DictReader(io.StringIO(csv_string))
+    fieldnames = reader.fieldnames or []
+
+    from_str = from_date.isoformat()
+    to_str = to_date.isoformat()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.append(fieldnames)
+
+    count = 0
+    for row in reader:
+        row_date = row.get("Date", "")
+        # Skip rows outside the date range (Hive API returns extras)
+        if row_date and not (from_str <= row_date <= to_str):
+            continue
+        # Skip malformed rows (broken multi-line values with no Date)
+        if not row_date:
+            continue
+        ws.append([_typed_value(row.get(h, "")) for h in fieldnames])
+        count += 1
+
+    filepath.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(str(filepath))
+    return count
 
 
 def run_setup() -> bool:
@@ -27,12 +159,10 @@ def run_setup() -> bool:
     Returns:
         True if setup completed successfully, False otherwise
     """
-    logger = get_logger()
     print("\n" + "=" * 60)
     print("HIVE Extract - Setup Wizard")
     print("=" * 60 + "\n")
 
-    # Ensure config directory exists
     config_dir = ensure_config_dir()
     print(f"Config directory: {config_dir}\n")
 
@@ -65,66 +195,47 @@ def run_setup() -> bool:
         return False
     print("Successfully connected to Hive!")
 
-    # Step 2: Google OAuth
-    print("\n" + "-" * 40)
-    print("Step 2: Google OAuth Setup")
-    print("-" * 40)
+    # Step 2: Workspace Selection
+    print("\nFetching available workspaces...")
+    workspaces = hive.get_workspaces()
 
-    credentials_path = get_credentials_path()
-    if not credentials_path.exists():
-        print(f"\nPlease place your Google OAuth credentials.json file at:")
-        print(f"  {credentials_path}")
-        print("\nTo get credentials.json:")
-        print("  1. Go to Google Cloud Console (https://console.cloud.google.com)")
-        print("  2. Create or select a project")
-        print("  3. Enable the Google Sheets API and Gmail API")
-        print("  4. Go to 'APIs & Services' -> 'Credentials'")
-        print("  5. Create OAuth 2.0 Client ID (Desktop application)")
-        print("  6. Download the JSON and save as credentials.json")
-        input("\nPress Enter when credentials.json is in place...")
-
-        if not credentials_path.exists():
-            print("Error: credentials.json not found")
-            return False
-
-    print("\nAuthenticating with Google (a browser window will open)...")
-    sheets = SheetsService(SPREADSHEET_ID)
-    if not sheets.authenticate():
-        print("Error: Failed to authenticate with Google")
+    if not workspaces:
+        print("Error: No workspaces found. Please check your credentials.")
         return False
-    print("Successfully authenticated with Google!")
 
-    # Test spreadsheet access
-    print("\nTesting spreadsheet access...")
-    if not sheets.test_access():
-        print("Error: Cannot access the spreadsheet. Check permissions.")
-        return False
-    print("Successfully accessed spreadsheet!")
-
-    # Verify tabs
-    print("\nVerifying required tabs...")
-    all_exist, missing = sheets.verify_tabs_exist()
-    if not all_exist:
-        print(f"\nWarning: Missing tabs: {', '.join(missing)}")
-        print("Please create these tabs in the spreadsheet before running extracts.")
+    workspace_id = ""
+    if len(workspaces) == 1:
+        ws = workspaces[0]
+        workspace_id = ws.get("id", "")
+        ws_name = ws.get("name", "Unknown")
+        print(f"Auto-selected workspace: {ws_name} (ID: {workspace_id})")
     else:
-        print("All required tabs exist!")
+        print(f"\nFound {len(workspaces)} workspaces:")
+        for i, ws in enumerate(workspaces, 1):
+            print(f"  {i}. {ws.get('name', 'Unknown')} (ID: {ws.get('id', '')})")
 
-    # Step 3: Notification Email
-    print("\n" + "-" * 40)
-    print("Step 3: Notification Settings")
-    print("-" * 40)
+        while True:
+            choice = input(f"\nSelect workspace [1-{len(workspaces)}]: ").strip()
+            try:
+                idx = int(choice) - 1
+                if 0 <= idx < len(workspaces):
+                    workspace_id = workspaces[idx].get("id", "")
+                    break
+                print(f"Please enter a number between 1 and {len(workspaces)}")
+            except ValueError:
+                print("Please enter a valid number")
 
-    default_email = "finance@lydiasierraconsulting.com"
-    email = input(f"\nNotification email [{default_email}]: ").strip()
-    if not email:
-        email = default_email
+    if not workspace_id:
+        print("Error: Could not determine workspace ID")
+        return False
+
+    print(f"Workspace ID: {workspace_id}")
 
     # Save settings
     settings = AppSettings(
         hive_api_key=api_key,
         hive_user_id=user_id,
-        notification_email=email,
+        hive_workspace_id=workspace_id,
     )
     save_settings(settings)
 
@@ -132,42 +243,99 @@ def run_setup() -> bool:
     print("Setup Complete!")
     print("=" * 60)
     print(f"\nSettings saved to: {config_dir / 'settings.json'}")
-    print("\nYou can now run the extract with: python src/main.py")
+    print(f"Excel files will be saved to: {OUTPUT_DIR}")
+    print("\nRun the extract with: python src/main.py")
 
     return True
 
 
-def process_extract(
-    hive: HiveService,
+def parse_csv_to_dicts(
+    csv_string: str,
+    from_date: date,
+    to_date: date,
+) -> List[Dict[str, Any]]:
+    """Parse raw CSV string, filter by date range, return list of dicts."""
+    if not csv_string:
+        return []
+
+    from_str = from_date.isoformat()
+    to_str = to_date.isoformat()
+
+    reader = csv.DictReader(io.StringIO(csv_string))
+    rows = []
+    for row in reader:
+        row_date = row.get("Date", "")
+        if row_date and not (from_str <= row_date <= to_str):
+            continue
+        if not row_date:
+            continue
+        rows.append(row)
+    return rows
+
+
+def write_to_sheets(
     sheets: SheetsService,
     extract_key: str,
-    tab_config: dict,
+    data: List[Dict[str, Any]],
+) -> int:
+    """Write data to the appropriate Google Sheets tab.
+
+    Rows 1-3 are reserved for formulas and never touched.
+    Headers go in row 4, data starts in row 5.
+    """
+    if not data:
+        return 0
+
+    # Get tab config
+    tab_config = TABS.get(extract_key) or YEAR_TABS.get(extract_key)
+    if not tab_config:
+        return 0
+
+    tab_name = tab_config["name"]
+    header_row = tab_config["header_row"]  # Row 4
+    data_start_row = tab_config["data_start_row"]  # Row 5
+
+    # Clear existing data (from row 4 onward - headers + data)
+    sheets.clear_tab_data(tab_name, header_row)
+
+    # Write headers and data
+    success, rows = sheets.write_data(
+        tab_name=tab_name,
+        data=data,
+        data_start_row=data_start_row,
+        include_headers=True,
+        header_row=header_row,
+    )
+    return rows if success else 0
+
+
+def process_extract(
+    hive: HiveService,
+    extract_key: str,
+    extract_config: dict,
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
+    sheets: Optional[SheetsService] = None,
+    write_excel: bool = False,
 ) -> Dict:
     """
-    Process a single extract.
-
-    Args:
-        hive: Hive service instance
-        sheets: Sheets service instance
-        extract_key: Key identifying the extract type
-        tab_config: Tab configuration dict
-        from_date: Optional start date for time-based extracts
-        to_date: Optional end date for time-based extracts
+    Process a single extract — fetch data from Hive, write to Excel and Sheets.
 
     Returns:
         Result dict with status, rows, and any error
     """
     logger = get_logger()
-    tab_name = tab_config["name"]
-    data_row = tab_config["data_row"]
-    description = tab_config.get("description", tab_name)
+    filename = extract_config["filename"]
+    description = extract_config["description"]
+    filepath = OUTPUT_DIR / filename
 
-    logger.info(f"Processing: {description} -> {tab_name}")
+    logger.info(f"Processing: {description} -> {filename}")
 
+    t0 = time.time()
     try:
         # Fetch data based on extract type
+        data: List[Dict[str, Any]] = []
+
         if extract_key == "active_projects":
             data = hive.get_projects(archived=False)
         elif extract_key == "archived_projects":
@@ -177,54 +345,60 @@ def process_extract(
                 raise ValueError("Date range required for time tracking")
             data = hive.get_time_entries(from_date, to_date)
         elif extract_key == "month_raw":
-            # This month's time report
             today = date.today()
             month_start = date(today.year, today.month, 1)
-            data = hive.get_time_report(month_start, today)
+            csv_string = hive.get_timesheet_report_csv_raw(month_start, today)
+            data = parse_csv_to_dicts(csv_string, month_start, today)
         elif extract_key == "year_raw":
-            # This year's time report
             today = date.today()
             year_start = date(today.year, 1, 1)
-            data = hive.get_time_report(year_start, today)
+            csv_string = hive.get_timesheet_report_csv_raw(year_start, today)
+            data = parse_csv_to_dicts(csv_string, year_start, today)
         elif extract_key.startswith("ALL_"):
-            # Year-specific extract
             year = int(extract_key.split("_")[1])
-            data = hive.get_year_time_entries(year)
+            csv_string = hive.get_year_timesheet_report_raw(year)
+            yr_start = date(year, 1, 1)
+            today = date.today()
+            yr_end = date(year, 12, 31) if year < today.year else today
+            data = parse_csv_to_dicts(csv_string, yr_start, yr_end)
         else:
             raise ValueError(f"Unknown extract type: {extract_key}")
 
-        # Clear existing data
-        sheets.clear_tab_data(tab_name, data_row)
+        rows = len(data)
 
-        # Write new data
-        success, rows = sheets.write_data(tab_name, data, data_row)
+        # Write to Google Sheets if connected
+        if sheets:
+            sheet_rows = write_to_sheets(sheets, extract_key, data)
+            logger.info(f"Wrote {sheet_rows} rows to Google Sheets tab")
+            rows = sheet_rows
 
-        if not success:
-            return {"status": "error", "rows": 0, "error": "Failed to write data"}
+        # Write to Excel if requested
+        if write_excel:
+            excel_rows = write_excel_file(filepath, data)
+            logger.info(f"Wrote {excel_rows} rows to {filename}")
+            if not sheets:
+                rows = excel_rows
 
-        # Update timestamp
-        sheets.update_timestamp(tab_name)
-
-        return {"status": "success", "rows": rows}
+        elapsed = time.time() - t0
+        logger.info(f"Processed {rows} rows ({elapsed:.1f}s)")
+        return {"status": "success", "rows": rows, "time": elapsed}
 
     except Exception as e:
-        logger.error(f"Error processing {tab_name}: {e}")
-        return {"status": "error", "rows": 0, "error": str(e)}
+        elapsed = time.time() - t0
+        logger.error(f"Error processing {description}: {e} ({elapsed:.1f}s)")
+        return {"status": "error", "rows": 0, "error": str(e), "time": elapsed}
 
 
-def run_extracts(from_date: date, to_date: date) -> int:
+def run_extracts(from_date: date, to_date: date, use_sheets: bool = True, use_excel: bool = False) -> int:
     """
     Run all extracts.
-
-    Args:
-        from_date: Start date for time-based extracts
-        to_date: End date for time-based extracts
 
     Returns:
         Exit code (0 for success, non-zero for errors)
     """
     logger = get_logger()
     logger.info(f"Starting HIVE Extract: {from_date} to {to_date}")
+    run_start = time.time()
 
     # Load settings
     settings = load_settings()
@@ -232,96 +406,96 @@ def run_extracts(from_date: date, to_date: date) -> int:
         logger.error("Application not configured. Run with --setup first.")
         return 1
 
-    # Initialize services
+    # Initialize Hive service
     hive = HiveService(
         HiveCredentials(
             api_key=settings.hive_api_key,
             user_id=settings.hive_user_id,
+            workspace_id=settings.hive_workspace_id,
         )
     )
 
-    sheets = SheetsService(SPREADSHEET_ID)
-
-    # Authenticate with Hive
+    # Test connection
     logger.info("Connecting to Hive...")
     if not hive.test_connection():
         logger.error("Failed to connect to Hive API")
         return 1
 
-    # Authenticate with Google
-    logger.info("Authenticating with Google...")
-    if not sheets.authenticate():
-        logger.error("Failed to authenticate with Google")
-        return 1
+    # Initialize Google Sheets service if requested
+    sheets: Optional[SheetsService] = None
+    if use_sheets:
+        from config import SPREADSHEET_ID
+        sheets = SheetsService(SPREADSHEET_ID)
+        if sheets.authenticate():
+            if not sheets.test_access():
+                logger.warning("Could not access Google Sheet, continuing without Sheets")
+                sheets = None
+        else:
+            logger.warning("Google Sheets auth failed, continuing without Sheets")
+            sheets = None
 
-    # Verify tabs exist
-    logger.info("Verifying spreadsheet tabs...")
-    all_exist, missing = sheets.verify_tabs_exist()
-    if not all_exist:
-        logger.warning(f"Missing tabs (will skip): {', '.join(missing)}")
+    # Ensure output directory exists if writing Excel
+    if use_excel:
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     # Track results
     results: Dict[str, dict] = {}
 
-    # Process standard tabs
-    for key, config in TABS.items():
-        if config["name"] in missing:
-            results[config["name"]] = {
-                "status": "skipped",
-                "rows": 0,
-                "error": "Tab does not exist",
-            }
-            continue
+    # Process standard extracts
+    for key, config in EXTRACTS.items():
+        result = process_extract(hive, key, config, from_date, to_date, sheets, use_excel)
+        results[config["filename"]] = result
 
-        result = process_extract(
-            hive, sheets, key, config, from_date, to_date
-        )
-        results[config["name"]] = result
-
-    # Process year tabs
+    # Process year extracts
     current_year = date.today().year
-    for tab_name, config in YEAR_TABS.items():
-        if tab_name in missing:
-            results[tab_name] = {
-                "status": "skipped",
-                "rows": 0,
-                "error": "Tab does not exist",
-            }
-            continue
-
-        # Only process years up to current year
-        year = int(tab_name.split("_")[1])
+    for key, config in YEAR_EXTRACTS.items():
+        year = int(key.split("_")[1])
         if year > current_year:
-            results[tab_name] = {
+            results[config["filename"]] = {
                 "status": "skipped",
                 "rows": 0,
                 "error": "Future year",
             }
             continue
 
-        full_config = {"name": tab_name, **config}
-        result = process_extract(hive, sheets, tab_name, full_config)
-        results[tab_name] = result
+        result = process_extract(hive, key, config, sheets=sheets, write_excel=use_excel)
+        results[config["filename"]] = result
 
     # Log summary
     success_count = sum(1 for r in results.values() if r["status"] == "success")
     error_count = sum(1 for r in results.values() if r["status"] == "error")
     skipped_count = sum(1 for r in results.values() if r["status"] == "skipped")
 
+    total_elapsed = time.time() - run_start
+
+    output_modes = []
+    if sheets:
+        output_modes.append("Google Sheets")
+    if use_excel:
+        output_modes.append("Excel")
+    output_status = " + ".join(output_modes) if output_modes else "No output"
+
     logger.info(
-        f"Extract complete: {success_count} succeeded, {error_count} failed, {skipped_count} skipped"
+        f"Extract complete ({output_status}): {success_count} succeeded, {error_count} failed, "
+        f"{skipped_count} skipped in {total_elapsed:.1f}s"
     )
 
-    # Send notification
-    try:
-        send_notification(
-            sheets.gmail,
-            settings.notification_email,
-            results,
-            (from_date, to_date),
-        )
-    except Exception as e:
-        logger.error(f"Failed to send notification: {e}")
+    print(f"\nOutput: {output_status}")
+    if use_excel:
+        print(f"Excel files: {OUTPUT_DIR}")
+    for name, r in results.items():
+        status = r["status"]
+        rows = r.get("rows", 0)
+        t = r.get("time", 0)
+        if status == "success":
+            print(f"  {name}: {rows} rows ({t:.1f}s)")
+        elif status == "error":
+            print(f"  {name}: ERROR - {r.get('error', '')} ({t:.1f}s)")
+        else:
+            print(f"  {name}: skipped")
+
+    total_rows = sum(r.get("rows", 0) for r in results.values())
+    print(f"\n  Total: {total_rows} rows, {total_elapsed:.1f}s elapsed")
 
     return 0 if error_count == 0 else 1
 
@@ -329,7 +503,7 @@ def run_extracts(from_date: date, to_date: date) -> int:
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(
-        description="HIVE Extract - Export Hive data to Google Sheets"
+        description="HIVE Extract - Export Hive data to Excel and Google Sheets"
     )
     parser.add_argument(
         "--setup",
@@ -339,12 +513,22 @@ def main():
     parser.add_argument(
         "--from-date",
         type=str,
-        help="Start date (YYYY-MM-DD) - bypasses date picker",
+        help="Start date (YYYY-MM-DD) - default: earlier of Jan 1 or 2 months ago",
     )
     parser.add_argument(
         "--to-date",
         type=str,
-        help="End date (YYYY-MM-DD) - bypasses date picker",
+        help="End date (YYYY-MM-DD) - default: today",
+    )
+    parser.add_argument(
+        "--no-sheets",
+        action="store_true",
+        help="Skip Google Sheets output",
+    )
+    parser.add_argument(
+        "--excel",
+        action="store_true",
+        help="Also write Excel files locally (default: Sheets only)",
     )
 
     args = parser.parse_args()
@@ -364,26 +548,38 @@ def main():
         print("  python src/main.py --setup")
         sys.exit(1)
 
-    # Get date range
-    if args.from_date and args.to_date:
-        # Use command-line dates
+    # Get date range — defaults: today and the earlier of Jan 1 or 2 months ago
+    to_date = date.today()
+    m = to_date.month - 2
+    y = to_date.year
+    if m <= 0:
+        m += 12
+        y -= 1
+    max_day = calendar.monthrange(y, m)[1]
+    two_months_ago = date(y, m, min(to_date.day, max_day))
+    jan1 = date(to_date.year, 1, 1)
+    from_date = min(jan1, two_months_ago)
+
+    if args.from_date:
         try:
             from_date = date.fromisoformat(args.from_date)
+        except ValueError as e:
+            print(f"Invalid from-date: {e}  (use YYYY-MM-DD)")
+            sys.exit(1)
+    if args.to_date:
+        try:
             to_date = date.fromisoformat(args.to_date)
         except ValueError as e:
-            print(f"Invalid date format: {e}")
-            print("Use YYYY-MM-DD format")
+            print(f"Invalid to-date: {e}  (use YYYY-MM-DD)")
             sys.exit(1)
-    else:
-        # Show date picker dialog
-        result = select_date_range()
-        if result is None:
-            print("Operation cancelled")
-            sys.exit(0)
-        from_date, to_date = result
+
+    # Show date range being used
+    print(f"MonthEXACT date range: {from_date} to {to_date}")
 
     # Run extracts
-    exit_code = run_extracts(from_date, to_date)
+    use_sheets = not args.no_sheets
+    use_excel = args.excel
+    exit_code = run_extracts(from_date, to_date, use_sheets=use_sheets, use_excel=use_excel)
     sys.exit(exit_code)
 
 

@@ -1,9 +1,8 @@
 """Persistent settings management for HIVE_Extract."""
 
 import json
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import Optional
 
 
 @dataclass
@@ -12,17 +11,16 @@ class AppSettings:
 
     hive_api_key: str = ""
     hive_user_id: str = ""
-    notification_email: str = "finance@lydiasierraconsulting.com"
+    hive_workspace_id: str = ""
     configuration_name: str = "HIVE_Extract"
 
     def is_configured(self) -> bool:
         """Check if required settings are present."""
-        return bool(self.hive_api_key and self.hive_user_id)
+        return bool(self.hive_api_key and self.hive_user_id and self.hive_workspace_id)
 
 
 def get_config_dir() -> Path:
     """Get the config directory path."""
-    # Config dir is relative to the project root (parent of src)
     src_dir = Path(__file__).parent
     project_root = src_dir.parent
     return project_root / "config"
@@ -31,16 +29,6 @@ def get_config_dir() -> Path:
 def get_settings_path() -> Path:
     """Get the settings.json file path."""
     return get_config_dir() / "settings.json"
-
-
-def get_credentials_path() -> Path:
-    """Get the credentials.json file path."""
-    return get_config_dir() / "credentials.json"
-
-
-def get_token_path() -> Path:
-    """Get the token.json file path."""
-    return get_config_dir() / "token.json"
 
 
 def load_settings() -> AppSettings:
@@ -56,9 +44,7 @@ def load_settings() -> AppSettings:
             return AppSettings(
                 hive_api_key=data.get("hive_api_key", ""),
                 hive_user_id=data.get("hive_user_id", ""),
-                notification_email=data.get(
-                    "notification_email", "finance@lydiasierraconsulting.com"
-                ),
+                hive_workspace_id=data.get("hive_workspace_id", ""),
                 configuration_name=data.get("configuration_name", "HIVE_Extract"),
             )
     except (json.JSONDecodeError, IOError) as e:
@@ -82,3 +68,13 @@ def ensure_config_dir() -> Path:
     config_dir = get_config_dir()
     config_dir.mkdir(parents=True, exist_ok=True)
     return config_dir
+
+
+def get_credentials_path() -> Path:
+    """Get the credentials.json file path."""
+    return get_config_dir() / "credentials.json"
+
+
+def get_token_path() -> Path:
+    """Get the token.json file path."""
+    return get_config_dir() / "token.json"
