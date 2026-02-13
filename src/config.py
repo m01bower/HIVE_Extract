@@ -68,3 +68,6 @@ YEAR_TABS = {
     f"ALL_{year}": {"name": f"ALL_{year}", "header_row": 5, "data_start_row": 6}
     for year in range(2020, 2027)
 }
+
+# Checks tab — used to validate data after extracts complete
+CHECKS_TAB = {"name": "Checks", "cell": "A3"}

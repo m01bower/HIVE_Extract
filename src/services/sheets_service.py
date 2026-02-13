@@ -309,6 +309,35 @@ class SheetsService:
             logger.error(f"Failed to get headers from {tab_name}: {e}")
             return []
 
+    def read_cell(self, tab_name: str, cell: str) -> str:
+        """
+        Read a single cell value from a tab.
+
+        Args:
+            tab_name: Name of the tab
+            cell: Cell reference (e.g. "A3")
+
+        Returns:
+            Cell value as a string, or empty string if blank/error
+        """
+        try:
+            range_name = f"'{tab_name}'!{cell}"
+            result = (
+                self.sheets.spreadsheets()
+                .values()
+                .get(spreadsheetId=self.spreadsheet_id, range=range_name)
+                .execute()
+            )
+
+            values = result.get("values", [[]])
+            if values and values[0]:
+                return str(values[0][0])
+            return ""
+
+        except Exception as e:
+            logger.error(f"Failed to read {tab_name}!{cell}: {e}")
+            return ""
+
     def test_access(self) -> bool:
         """
         Test access to the spreadsheet.

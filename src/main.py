@@ -14,7 +14,7 @@ import re
 
 from openpyxl import Workbook
 
-from config import EXTRACTS, YEAR_EXTRACTS, OUTPUT_DIR, TABS, YEAR_TABS
+from config import EXTRACTS, YEAR_EXTRACTS, OUTPUT_DIR, TABS, YEAR_TABS, CHECKS_TAB
 from settings import (
     AppSettings,
     load_settings,
@@ -24,6 +24,7 @@ from settings import (
 from logger_setup import setup_logger, get_logger
 from services.hive_service import HiveService, HiveCredentials
 from services.sheets_service import SheetsService
+from notification import send_chat_notification
 from gui.date_picker import select_date_range
 
 
@@ -441,12 +442,10 @@ def run_extracts(from_date: date, to_date: date, use_sheets: bool = True, use_ex
     # Track results
     results: Dict[str, dict] = {}
 
-    # Process standard extracts
-    for key, config in EXTRACTS.items():
-        result = process_extract(hive, key, config, from_date, to_date, sheets, use_excel)
-        results[config["filename"]] = result
+    # Processing order: years first, then months, then billing projects
+    # This gives Sheets formulas time to recalculate before Checks validation
 
-    # Process year extracts
+    # 1. Year extracts (ALL_2020 through ALL_2026)
     current_year = date.today().year
     for key, config in YEAR_EXTRACTS.items():
         year = int(key.split("_")[1])
@@ -459,6 +458,20 @@ def run_extracts(from_date: date, to_date: date, use_sheets: bool = True, use_ex
             continue
 
         result = process_extract(hive, key, config, sheets=sheets, write_excel=use_excel)
+        results[config["filename"]] = result
+
+    # 2. Month extracts (year_raw, month_raw, time_tracking)
+    month_keys = ["year_raw", "month_raw", "time_tracking"]
+    for key in month_keys:
+        config = EXTRACTS[key]
+        result = process_extract(hive, key, config, from_date, to_date, sheets, use_excel)
+        results[config["filename"]] = result
+
+    # 3. Billing project extracts (active, archived)
+    project_keys = ["active_projects", "archived_projects"]
+    for key in project_keys:
+        config = EXTRACTS[key]
+        result = process_extract(hive, key, config, from_date, to_date, sheets, use_excel)
         results[config["filename"]] = result
 
     # Log summary
@@ -496,6 +509,35 @@ def run_extracts(from_date: date, to_date: date, use_sheets: bool = True, use_ex
 
     total_rows = sum(r.get("rows", 0) for r in results.values())
     print(f"\n  Total: {total_rows} rows, {total_elapsed:.1f}s elapsed")
+
+    # --- Checks validation ---
+    checks_value = ""
+    checks_ok = False
+    if sheets:
+        checks_value = sheets.read_cell(CHECKS_TAB["name"], CHECKS_TAB["cell"]).strip()
+        checks_ok = checks_value.upper() == "ALL GOOD"
+        if checks_ok:
+            logger.info("Checks validation: ALL GOOD")
+        else:
+            logger.warning(f"Checks validation: PROBLEMS DETECTED — {checks_value!r}")
+
+    # --- Google Chat notification ---
+    notification_msg = (
+        f"HIVE Extract complete: {success_count} succeeded, {error_count} failed, "
+        f"{skipped_count} skipped ({total_elapsed:.1f}s)\n"
+    )
+    if sheets:
+        if checks_ok:
+            notification_msg += "Checks: ALL GOOD"
+        else:
+            notification_msg += f"Checks: PROBLEMS DETECTED — {checks_value}"
+    else:
+        notification_msg += "Checks: skipped (Sheets not connected)"
+
+    if settings.google_chat_webhook_url:
+        send_chat_notification(settings.google_chat_webhook_url, notification_msg)
+    else:
+        logger.debug("Google Chat webhook not configured, skipping notification")
 
     return 0 if error_count == 0 else 1
 

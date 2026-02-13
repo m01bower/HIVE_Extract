@@ -1,10 +1,12 @@
-"""Email notification via Gmail API."""
+"""Notification services for HIVE_Extract."""
 
 import base64
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
 from typing import Optional, Dict, List
+
+import requests
 from googleapiclient.discovery import Resource
 
 from logger_setup import get_logger
@@ -159,4 +161,25 @@ Please check the logs for more details.
 
     except Exception as e:
         logger.error(f"Failed to send error notification: {e}")
+        return False
+
+
+def send_chat_notification(webhook_url: str, message: str) -> bool:
+    """
+    Send a notification to a Google Chat Space via webhook.
+
+    Args:
+        webhook_url: Google Chat webhook URL
+        message: Message text to send
+
+    Returns:
+        True if sent successfully, False otherwise
+    """
+    try:
+        response = requests.post(webhook_url, json={"text": message}, timeout=10)
+        response.raise_for_status()
+        logger.info("Google Chat notification sent successfully")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to send Google Chat notification: {e}")
         return False

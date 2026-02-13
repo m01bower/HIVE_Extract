@@ -13,6 +13,7 @@ class AppSettings:
     hive_user_id: str = ""
     hive_workspace_id: str = ""
     configuration_name: str = "HIVE_Extract"
+    google_chat_webhook_url: str = ""
 
     def is_configured(self) -> bool:
         """Check if required settings are present."""
@@ -46,6 +47,7 @@ def load_settings() -> AppSettings:
                 hive_user_id=data.get("hive_user_id", ""),
                 hive_workspace_id=data.get("hive_workspace_id", ""),
                 configuration_name=data.get("configuration_name", "HIVE_Extract"),
+                google_chat_webhook_url=data.get("google_chat_webhook_url", ""),
             )
     except (json.JSONDecodeError, IOError) as e:
         print(f"Warning: Could not load settings: {e}")
