@@ -17,30 +17,21 @@ logger = get_logger()
 
 
 def clean_text(value: Any) -> Any:
-    """Clean text values to remove encoding artifacts and normalize whitespace.
+    """Clean text values to remove encoding artifacts.
 
-    Fixes common issues like:
+    Fixes:
     - Â appearing before spaces (UTF-8 encoding issues)
-    - Non-breaking spaces (U+00A0) → regular spaces
-    - Multiple spaces → single space
-    - Other Unicode control characters
+    - Normalizes Unicode (NFC form)
+    Non-breaking spaces (U+00A0) are preserved to match Hive's output.
     """
     if not isinstance(value, str):
         return value
 
-    # Replace non-breaking spaces with regular spaces
-    text = value.replace('\u00a0', ' ')
-
-    # Remove Â that appears before spaces (common encoding artifact)
-    text = re.sub(r'Â\s', ' ', text)
-    text = re.sub(r'\sÂ', ' ', text)
-    text = text.replace('Â', '')
+    # Remove Â encoding artifacts (but preserve non-breaking spaces)
+    text = re.sub(r'Â', '', value)
 
     # Normalize Unicode (NFC form)
     text = unicodedata.normalize('NFC', text)
-
-    # Collapse multiple spaces into one
-    text = re.sub(r' +', ' ', text)
 
     # Strip leading/trailing whitespace
     return text.strip()
@@ -201,6 +192,35 @@ class HiveService:
             logger.warning(f"Could not fetch workspace users: {e}")
             return {}
 
+    def resolve_user(self, user_id: str) -> Dict[str, str]:
+        """Look up a single user by ID via /users/{id} endpoint.
+
+        Used as a fallback when get_workspace_users() doesn't include a user
+        (e.g. deactivated/terminated users).  Results are merged into the
+        cached lookup so each ID is fetched at most once.
+        """
+        # Check cache first
+        if self._user_lookup and user_id in self._user_lookup:
+            return self._user_lookup[user_id]
+
+        try:
+            u = self._rest_get(f"/users/{user_id}")
+            profile = u.get("profile", {})
+            info = {
+                "fullName": u.get("fullName", ""),
+                "email": u.get("email", ""),
+                "firstName": profile.get("firstName", u.get("firstName", "")),
+                "lastName": profile.get("lastName", u.get("lastName", "")),
+            }
+            # Cache for future lookups
+            if self._user_lookup is not None:
+                self._user_lookup[user_id] = info
+            logger.info(f"Resolved missing user {user_id}: {info['fullName']}")
+            return info
+        except Exception as e:
+            logger.warning(f"Could not resolve user {user_id}: {e}")
+            return {}
+
     # ------------------------------------------------------------------
     # Utility
     # ------------------------------------------------------------------
@@ -215,12 +235,13 @@ class HiveService:
         return str(val)
 
     @staticmethod
-    def _minutes_to_hhmm(minutes: int) -> str:
-        """Convert integer minutes to HH:mm string."""
+    def _minutes_to_hhmm(minutes) -> str:
+        """Convert minutes (int or float) to HH:mm string."""
         if not minutes:
             return "0:00"
-        h = minutes // 60
-        m = minutes % 60
+        total = int(round(minutes))
+        h = total // 60
+        m = total % 60
         return f"{h}:{m:02d}"
 
     @staticmethod
@@ -426,11 +447,14 @@ class HiveService:
             for entry in actual_list:
                 uid = entry.get("userId", "")
                 user_info = user_lookup.get(uid, {})
+                # Fallback: resolve missing users individually (e.g. terminated)
+                if uid and not user_info:
+                    user_info = self.resolve_user(uid)
 
                 time_seconds = entry.get("time", 0) or 0
-                tracked_minutes = round(time_seconds / 60)
+                tracked_minutes = round(time_seconds / 60, 2)
 
-                est_minutes = round(overall_estimate / 60) if overall_estimate else 0
+                est_minutes = round(overall_estimate / 60, 2) if overall_estimate else 0
 
                 raw_date = entry.get("date", "")
                 if isinstance(raw_date, str) and "T" in raw_date:
@@ -457,8 +481,16 @@ class HiveService:
 
                 all_entries.append(row)
 
-        logger.info(f"Retrieved {len(all_entries)} time entries")
-        return all_entries
+        # Filter to requested date range — Hive API may return extras
+        from_str = from_date.isoformat()
+        to_str = to_date.isoformat()
+        filtered = [
+            e for e in all_entries
+            if e.get("Time Tracked Date") and from_str <= e["Time Tracked Date"] <= to_str
+        ]
+
+        logger.info(f"Retrieved {len(all_entries)} time entries, {len(filtered)} in date range")
+        return filtered
 
     # ------------------------------------------------------------------
     # Month_RAW / Year_RAW / ALL_YYYY  —  timesheet reporting CSV

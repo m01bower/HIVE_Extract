@@ -20,26 +20,18 @@ logger = get_logger()
 
 
 def _clean_text(value: str) -> str:
-    """Clean text to remove encoding artifacts and normalize whitespace.
+    """Clean text to remove encoding artifacts.
 
-    Fixes common issues like:
+    Fixes:
     - Â appearing before spaces (UTF-8 encoding issues)
-    - Non-breaking spaces (U+00A0) → regular spaces
-    - Multiple spaces → single space
+    - Normalizes Unicode (NFC form)
+    Non-breaking spaces (U+00A0) are preserved to match Hive's output.
     """
-    # Replace non-breaking spaces with regular spaces
-    text = value.replace('\u00a0', ' ')
-
-    # Remove Â that appears before/after spaces (common encoding artifact)
-    text = re.sub(r'Â\s', ' ', text)
-    text = re.sub(r'\sÂ', ' ', text)
-    text = text.replace('Â', '')
+    # Remove Â encoding artifacts (but preserve non-breaking spaces)
+    text = re.sub(r'Â', '', value)
 
     # Normalize Unicode (NFC form)
     text = unicodedata.normalize('NFC', text)
-
-    # Collapse multiple spaces into one
-    text = re.sub(r' +', ' ', text)
 
     return text.strip()
 
@@ -245,12 +237,12 @@ class SheetsService:
                     body={"values": [headers]},
                 ).execute()
 
-            # Write data - use RAW to insert values only, no formatting
+            # Write data - use USER_ENTERED so Sheets parses dates/numbers
             data_range = f"'{tab_name}'!A{data_start_row}"
             self.sheets.spreadsheets().values().update(
                 spreadsheetId=self.spreadsheet_id,
                 range=data_range,
-                valueInputOption="RAW",
+                valueInputOption="USER_ENTERED",
                 body={"values": rows},
             ).execute()
 
