@@ -307,6 +307,10 @@ def write_to_sheets(
         include_headers=True,
         header_row=header_row,
     )
+
+    if success:
+        sheets.update_timestamp(tab_name, cell="C1")
+
     return rows if success else 0
 
 
