@@ -72,11 +72,18 @@ def ensure_config_dir() -> Path:
     return config_dir
 
 
+def get_shared_config_dir() -> Path:
+    """Get the shared BosOpt credentials directory path."""
+    src_dir = Path(__file__).parent
+    project_root = src_dir.parent
+    return project_root.parent / "_shared_config" / "clients" / "BosOpt"
+
+
 def get_credentials_path() -> Path:
     """Get the credentials.json file path."""
-    return get_config_dir() / "credentials.json"
+    return get_shared_config_dir() / "credentials.json"
 
 
 def get_token_path() -> Path:
     """Get the token.json file path."""
-    return get_config_dir() / "token.json"
+    return get_shared_config_dir() / "token.json"
