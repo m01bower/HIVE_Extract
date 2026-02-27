@@ -577,10 +577,16 @@ def run_extracts(
             logger.warning(f"Checks validation: PROBLEMS DETECTED — {checks_value!r}")
 
     # --- Google Chat notification ---
-    notification_msg = (
-        f"HIVE Extract complete: {success_count} succeeded, {error_count} failed, "
-        f"{skipped_count} skipped ({total_elapsed:.1f}s)\n"
-    )
+    notification_msg = f"HIVE Extract complete ({total_elapsed:.1f}s)\n"
+    for name, r in results.items():
+        status = r["status"]
+        rows = r.get("rows", 0)
+        if status == "success":
+            notification_msg += f"  ✓ {name}: {rows} rows\n"
+        elif status == "error":
+            notification_msg += f"  ✗ {name}: ERROR - {r.get('error', '')}\n"
+        else:
+            notification_msg += f"  − {name}: skipped\n"
     if sheets:
         if checks_ok:
             notification_msg += "Checks: ALL GOOD"
