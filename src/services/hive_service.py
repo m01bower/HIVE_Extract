@@ -338,6 +338,16 @@ class HiveService:
         return row
 
     # ------------------------------------------------------------------
+    # Projects_ALL  —  combined active + archived
+    # ------------------------------------------------------------------
+
+    def get_all_projects(self) -> List[Dict[str, Any]]:
+        """Fetch all projects (active + archived) combined into one list."""
+        active = self.get_projects(archived=False)
+        archived = self.get_projects(archived=True)
+        return active + archived
+
+    # ------------------------------------------------------------------
     # MonthEXACT_RAW  —  detailed time tracking entries
     # ------------------------------------------------------------------
 

@@ -14,7 +14,10 @@ import re
 
 from openpyxl import Workbook
 
-from config import EXTRACTS, YEAR_EXTRACTS, OUTPUT_DIR, TABS, YEAR_TABS, CHECKS_TAB
+from config import (
+    EXTRACTS, YEAR_EXTRACTS, OUTPUT_DIR, TABS, YEAR_TABS, CHECKS_TAB,
+    COLUMN_ORDER, EXCLUDED_COLUMNS,
+)
 from settings import (
     AppSettings,
     load_settings,
@@ -274,6 +277,32 @@ def parse_csv_to_dicts(
     return rows
 
 
+def _order_data(extract_key: str, data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Reorder dict keys to match the required column order for this extract.
+
+    Required columns come first in the defined order, then any extra
+    columns from the API are appended alphabetically.
+    Columns in EXCLUDED_COLUMNS are always dropped.
+    """
+    required_order = COLUMN_ORDER.get(extract_key)
+    if not required_order:
+        return data
+
+    # Collect all keys across all rows, minus excluded
+    all_keys = set()
+    for row in data:
+        all_keys.update(row.keys())
+    all_keys -= EXCLUDED_COLUMNS
+
+    # Build final column list: required order first, then extras
+    ordered = [c for c in required_order if c in all_keys]
+    extras = sorted(all_keys - set(required_order))
+    final_order = ordered + extras
+
+    # Rewrite each row with the correct key order
+    return [{col: row.get(col, "") for col in final_order} for row in data]
+
+
 def write_to_sheets(
     sheets: SheetsService,
     extract_key: str,
@@ -295,6 +324,9 @@ def write_to_sheets(
     tab_name = tab_config["name"]
     header_row = tab_config["header_row"]  # Row 4
     data_start_row = tab_config["data_start_row"]  # Row 5
+
+    # Enforce column order
+    data = _order_data(extract_key, data)
 
     # Clear existing data (from row 4 onward - headers + data)
     sheets.clear_tab_data(tab_name, header_row)
@@ -345,6 +377,8 @@ def process_extract(
             data = hive.get_projects(archived=False)
         elif extract_key == "archived_projects":
             data = hive.get_projects(archived=True)
+        elif extract_key == "all_projects":
+            data = hive.get_all_projects()
         elif extract_key == "time_tracking":
             if not from_date or not to_date:
                 raise ValueError("Date range required for time tracking")
@@ -394,16 +428,48 @@ def process_extract(
         return {"status": "error", "rows": 0, "error": str(e), "time": elapsed}
 
 
-def run_extracts(from_date: date, to_date: date, use_sheets: bool = True, use_excel: bool = False) -> int:
+def run_extracts(
+    from_date: date,
+    to_date: date,
+    mode: str = "all",
+    use_sheets: bool = True,
+    use_excel: bool = False,
+) -> int:
     """
-    Run all extracts.
+    Run extracts based on mode.
+
+    Modes:
+        all        — Projects + MonthExact (supported extracts)
+        projects   — Active, Archived, and combined Projects_ALL
+        monthexact — Time tracking entries (MonthEXACT_RAW)
+        timesheet  — Month_RAW, Year_RAW (NOT YET SUPPORTED - Hive API issue)
+        yearly     — ALL_2020..ALL_2026 (NOT YET SUPPORTED - Hive API issue)
 
     Returns:
         Exit code (0 for success, non-zero for errors)
     """
     logger = get_logger()
-    logger.info(f"Starting HIVE Extract: {from_date} to {to_date}")
+    logger.info(f"Starting HIVE Extract (mode={mode}): {from_date} to {to_date}")
     run_start = time.time()
+
+    # Validate mode
+    SUPPORTED_MODES = {"all", "projects", "monthexact"}
+    UNSUPPORTED_MODES = {"timesheet", "yearly"}
+    valid_modes = SUPPORTED_MODES | UNSUPPORTED_MODES
+
+    if mode not in valid_modes:
+        logger.error(
+            f"Unknown mode: {mode!r}. "
+            f"Valid modes: {', '.join(sorted(valid_modes))}"
+        )
+        return 1
+
+    if mode in UNSUPPORTED_MODES:
+        logger.error(
+            f"Mode {mode!r} is not yet supported — waiting for Hive API fix. "
+            f"Supported modes: {', '.join(sorted(SUPPORTED_MODES))}"
+        )
+        return 1
 
     # Load settings
     settings = load_settings()
@@ -446,36 +512,21 @@ def run_extracts(from_date: date, to_date: date, use_sheets: bool = True, use_ex
     # Track results
     results: Dict[str, dict] = {}
 
-    # Processing order: years first, then months, then billing projects
-    # This gives Sheets formulas time to recalculate before Checks validation
+    run_projects = mode in ("all", "projects")
+    run_monthexact = mode in ("all", "monthexact")
 
-    # 1. Year extracts (ALL_2020 through ALL_2026)
-    current_year = date.today().year
-    for key, config in YEAR_EXTRACTS.items():
-        year = int(key.split("_")[1])
-        if year > current_year:
-            results[config["filename"]] = {
-                "status": "skipped",
-                "rows": 0,
-                "error": "Future year",
-            }
-            continue
+    # 1. Projects (active, archived, combined)
+    if run_projects:
+        project_keys = ["active_projects", "archived_projects", "all_projects"]
+        for key in project_keys:
+            config = EXTRACTS[key]
+            result = process_extract(hive, key, config, from_date, to_date, sheets, use_excel)
+            results[config["filename"]] = result
 
-        result = process_extract(hive, key, config, sheets=sheets, write_excel=use_excel)
-        results[config["filename"]] = result
-
-    # 2. Month extracts (year_raw, month_raw, time_tracking)
-    month_keys = ["year_raw", "month_raw", "time_tracking"]
-    for key in month_keys:
-        config = EXTRACTS[key]
-        result = process_extract(hive, key, config, from_date, to_date, sheets, use_excel)
-        results[config["filename"]] = result
-
-    # 3. Billing project extracts (active, archived)
-    project_keys = ["active_projects", "archived_projects"]
-    for key in project_keys:
-        config = EXTRACTS[key]
-        result = process_extract(hive, key, config, from_date, to_date, sheets, use_excel)
+    # 2. MonthEXACT (time tracking entries)
+    if run_monthexact:
+        config = EXTRACTS["time_tracking"]
+        result = process_extract(hive, "time_tracking", config, from_date, to_date, sheets, use_excel)
         results[config["filename"]] = result
 
     # Log summary
@@ -548,8 +599,25 @@ def run_extracts(from_date: date, to_date: date, use_sheets: bool = True, use_ex
 
 def main():
     """Main entry point."""
+    from datetime import timedelta
+
     parser = argparse.ArgumentParser(
         description="HIVE Extract - Export Hive data to Excel and Google Sheets"
+    )
+    parser.add_argument(
+        "mode",
+        nargs="?",
+        default="all",
+        choices=["all", "projects", "monthexact", "timesheet", "yearly"],
+        help=(
+            "What to extract: "
+            "all (Projects + MonthExact), "
+            "projects (Active/Archived/Combined), "
+            "monthexact (time tracking entries), "
+            "timesheet (NOT YET SUPPORTED), "
+            "yearly (NOT YET SUPPORTED). "
+            "Default: all"
+        ),
     )
     parser.add_argument(
         "--setup",
@@ -559,7 +627,7 @@ def main():
     parser.add_argument(
         "--from-date",
         type=str,
-        help="Start date (YYYY-MM-DD) - default: earlier of Jan 1 or 2 months ago",
+        help="Start date (YYYY-MM-DD) - default: today minus 45 days",
     )
     parser.add_argument(
         "--to-date",
@@ -594,17 +662,9 @@ def main():
         print("  python src/main.py --setup")
         sys.exit(1)
 
-    # Get date range — defaults: today and the earlier of Jan 1 or 2 months ago
+    # Date range — default: today-45 days through today
     to_date = date.today()
-    m = to_date.month - 2
-    y = to_date.year
-    if m <= 0:
-        m += 12
-        y -= 1
-    max_day = calendar.monthrange(y, m)[1]
-    two_months_ago = date(y, m, min(to_date.day, max_day))
-    jan1 = date(to_date.year, 1, 1)
-    from_date = min(jan1, two_months_ago)
+    from_date = to_date - timedelta(days=45)
 
     if args.from_date:
         try:
@@ -619,13 +679,14 @@ def main():
             print(f"Invalid to-date: {e}  (use YYYY-MM-DD)")
             sys.exit(1)
 
-    # Show date range being used
-    print(f"MonthEXACT date range: {from_date} to {to_date}")
+    mode = args.mode
+    print(f"Mode: {mode}")
+    print(f"Date range: {from_date} to {to_date}")
 
     # Run extracts
     use_sheets = not args.no_sheets
     use_excel = args.excel
-    exit_code = run_extracts(from_date, to_date, use_sheets=use_sheets, use_excel=use_excel)
+    exit_code = run_extracts(from_date, to_date, mode=mode, use_sheets=use_sheets, use_excel=use_excel)
     sys.exit(exit_code)
 
 

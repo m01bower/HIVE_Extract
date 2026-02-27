@@ -28,6 +28,10 @@ EXTRACTS = {
         "filename": "Year_RAW.xlsx",
         "description": "Time Reporting - This Year",
     },
+    "all_projects": {
+        "filename": "Projects_ALL.xlsx",
+        "description": "All Projects (Active + Archived)",
+    },
 }
 
 # Year extracts: ALL_2020 through ALL_2026
@@ -61,6 +65,7 @@ TABS = {
     "time_tracking": {"name": "MonthEXACT_RAW", "header_row": 4, "data_start_row": 5},
     "month_raw": {"name": "Month_RAW", "header_row": 4, "data_start_row": 5},
     "year_raw": {"name": "Year_RAW", "header_row": 4, "data_start_row": 5},
+    "all_projects": {"name": "Projects_ALL", "header_row": 4, "data_start_row": 5},
 }
 
 # Year tab configurations - headers in row 5, data starts row 6
@@ -68,6 +73,46 @@ YEAR_TABS = {
     f"ALL_{year}": {"name": f"ALL_{year}", "header_row": 5, "data_start_row": 6}
     for year in range(2020, 2027)
 }
+
+# Required column orders — columns must appear in this order.
+# Any extra columns from the API are appended at the end.
+COLUMN_ORDER = {
+    "all_projects": [
+        "Members", "Project name", "Client Name", "Project Codes",
+        "LSC Prospect?", "Project Type", "Funder Type", "Amount Requested",
+        "Amount Awarded", "Grant Period Start Date", "Grant Period End Date",
+        "Renew Next Elgible Application Cycle?", "Stage", "Submission Year",
+        "Funder Notification Date", "Note(s)", "Funder Name", "Date Submitted",
+        "Grant Type",
+    ],
+    "active_projects": [
+        "Project name", "Members", "Status", "Start Date", "End Date",
+        "Project ID", "Client Name", "Funder Name", "Submission Year",
+        "Date Submitted", "Stage", "Funder Notification Date",
+        "Amount Requested", "Amount Awarded", "Project Type", "Grant Type",
+        "Funder Type", "Grant Period Start Date", "Grant Period End Date",
+        "Renew Next Elgible Application Cycle?", "Project Codes", "Note(s)",
+        "LSC Prospect?",
+    ],
+    "archived_projects": [
+        "Project name", "Members", "Archived at", "Status", "Start Date",
+        "End Date", "Project ID", "Client Name", "Funder Name",
+        "Submission Year", "Date Submitted", "Stage",
+        "Funder Notification Date", "Amount Requested", "Amount Awarded",
+        "Project Type", "Grant Type", "Funder Type",
+        "Grant Period Start Date", "Grant Period End Date",
+        "Renew Next Elgible Application Cycle?", "Project Codes", "Note(s)",
+        "LSC Prospect?",
+    ],
+    "time_tracking": [
+        "Time Tracked By", "Project", "Parent Project", "Action Title",
+        "Time Tracked Date", "Tracked (Minutes)", "Tracked (HH:mm)",
+        "Estimated (Minutes)", "Estimated (HH:mm)", "Description", "Labels",
+    ],
+}
+
+# Columns to always exclude from output (not useful)
+EXCLUDED_COLUMNS = {"Monthly Budget"}
 
 # Checks tab — used to validate data after extracts complete
 CHECKS_TAB = {"name": "Checks", "cell": "A3"}
