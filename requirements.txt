@@ -13,3 +13,6 @@ google-api-python-client>=2.0.0
 
 # Environment & Config
 python-dotenv>=1.0.0
+
+# Secure credential storage
+keyring>=25.0.0

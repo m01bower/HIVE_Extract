@@ -47,12 +47,11 @@ YEAR_EXTRACTS = {
 HIVE_API_BASE_URL = "https://app.hive.com/api/v1"
 HIVE_GRAPHQL_URL = "https://prod-gql.hive.com/graphql"
 
-# Config file paths (relative to project root)
-CONFIG_DIR = "config"
+# Settings file name (stored in _shared_config/apps/HIVE_Extract/)
 SETTINGS_FILE = "settings.json"
 
 # Google Sheets Configuration
-SPREADSHEET_ID = "15yeShYPuviHX5JmnPKA3ulwKVTTRMOA6PfyI1iwCUPA"
+# SPREADSHEET_ID now comes from MasterConfig (client.sheets.hive_extract_sheet_id)
 GOOGLE_SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
 ]
@@ -113,6 +112,21 @@ COLUMN_ORDER = {
 
 # Columns to always exclude from output (not useful)
 EXCLUDED_COLUMNS = {"Monthly Budget"}
+
+# Projects the API returns but the Hive UI hides (templates, internal items).
+# These are excluded from project extracts to match the UI export.
+EXCLUDED_PROJECTS_ACTIVE = {
+    "Irma's Clients - Grant Report Template",
+    "Irma's Clients - LOI Template",
+    "Irma's Clients - Proposal Template",
+    "Lexi's Clients - Grant Report Template",
+    "Lexi's Clients - LOI Template",
+    "Lexi's Clients - Proposal Template",
+}
+EXCLUDED_PROJECTS_ARCHIVED = {
+    "Monthly Work",
+    "Prospect Review Template",
+}
 
 # Checks tab — used to validate data after extracts complete
 CHECKS_TAB = {"name": "Checks", "cell": "A3"}

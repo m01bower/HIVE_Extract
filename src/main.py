@@ -23,12 +23,17 @@ from settings import (
     load_settings,
     save_settings,
     ensure_config_dir,
+    SHARED_CONFIG_DIR,
 )
 from logger_setup import setup_logger, get_logger
 from services.hive_service import HiveService, HiveCredentials
 from services.sheets_service import SheetsService
 from notification import send_chat_notification
 from gui.date_picker import select_date_range
+
+# Add shared config to path so we can import config_reader
+sys.path.insert(0, str(SHARED_CONFIG_DIR))
+from config_reader import MasterConfig, ClientConfig
 
 
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -170,85 +175,44 @@ def run_setup() -> bool:
     config_dir = ensure_config_dir()
     print(f"Config directory: {config_dir}\n")
 
-    # Step 1: Hive API Credentials
+    # Step 1: Hive API Key (the only secret stored locally)
     print("-" * 40)
-    print("Step 1: Hive API Credentials")
+    print("Step 1: Hive API Key")
     print("-" * 40)
-    print("\nTo get your Hive API credentials:")
+    print("\nTo get your Hive API key:")
     print("  1. Log into Hive at https://app.hive.com")
     print("  2. Click your profile icon (bottom left)")
     print("  3. Go to 'Apps & Integrations' -> 'API'")
-    print("  4. Generate a new API key (copy it immediately - shown only once)")
-    print("  5. Note your User ID from the same page\n")
+    print("  4. Generate a new API key (copy it immediately - shown only once)\n")
+    print("Note: workspace_id and user_id are now managed in the Master Config sheet.")
+    print("Only the API key (a secret) is stored locally.\n")
 
     api_key = input("Enter your Hive API key: ").strip()
     if not api_key:
         print("Error: API key is required")
         return False
 
-    user_id = input("Enter your Hive User ID: ").strip()
-    if not user_id:
-        print("Error: User ID is required")
-        return False
-
-    # Test Hive connection
+    # Test Hive connection (basic auth check only - no workspace needed)
     print("\nTesting Hive API connection...")
-    hive = HiveService(HiveCredentials(api_key=api_key, user_id=user_id))
+    hive = HiveService(HiveCredentials(api_key=api_key, user_id="test"))
     if not hive.test_connection():
-        print("Error: Failed to connect to Hive API. Please check your credentials.")
+        print("Error: Failed to connect to Hive API. Please check your API key.")
         return False
     print("Successfully connected to Hive!")
 
-    # Step 2: Workspace Selection
-    print("\nFetching available workspaces...")
-    workspaces = hive.get_workspaces()
-
-    if not workspaces:
-        print("Error: No workspaces found. Please check your credentials.")
-        return False
-
-    workspace_id = ""
-    if len(workspaces) == 1:
-        ws = workspaces[0]
-        workspace_id = ws.get("id", "")
-        ws_name = ws.get("name", "Unknown")
-        print(f"Auto-selected workspace: {ws_name} (ID: {workspace_id})")
-    else:
-        print(f"\nFound {len(workspaces)} workspaces:")
-        for i, ws in enumerate(workspaces, 1):
-            print(f"  {i}. {ws.get('name', 'Unknown')} (ID: {ws.get('id', '')})")
-
-        while True:
-            choice = input(f"\nSelect workspace [1-{len(workspaces)}]: ").strip()
-            try:
-                idx = int(choice) - 1
-                if 0 <= idx < len(workspaces):
-                    workspace_id = workspaces[idx].get("id", "")
-                    break
-                print(f"Please enter a number between 1 and {len(workspaces)}")
-            except ValueError:
-                print("Please enter a valid number")
-
-    if not workspace_id:
-        print("Error: Could not determine workspace ID")
-        return False
-
-    print(f"Workspace ID: {workspace_id}")
-
-    # Save settings
-    settings = AppSettings(
-        hive_api_key=api_key,
-        hive_user_id=user_id,
-        hive_workspace_id=workspace_id,
-    )
+    # Save settings (API key only)
+    settings = AppSettings(hive_api_key=api_key)
     save_settings(settings)
 
     print("\n" + "=" * 60)
     print("Setup Complete!")
     print("=" * 60)
-    print(f"\nSettings saved to: {config_dir / 'settings.json'}")
+    print(f"\nAPI key saved to OS keyring (Service: BosOpt, Username: Hive-APIKey)")
+    print(f"Other settings saved to: {config_dir / 'settings.json'}")
     print(f"Excel files will be saved to: {OUTPUT_DIR}")
-    print("\nRun the extract with: python src/main.py")
+    print("\nOther settings (workspace_id, user_id, sheet IDs, webhooks)")
+    print("are managed in the Master Config Google Sheet.")
+    print("\nRun the extract with: python src/main.py [--client LSC]")
 
     return True
 
@@ -431,6 +395,7 @@ def process_extract(
 def run_extracts(
     from_date: date,
     to_date: date,
+    client_config: ClientConfig,
     mode: str = "all",
     use_sheets: bool = True,
     use_excel: bool = False,
@@ -471,18 +436,27 @@ def run_extracts(
         )
         return 1
 
-    # Load settings
+    # Load local settings (API key only)
     settings = load_settings()
     if not settings.is_configured():
-        logger.error("Application not configured. Run with --setup first.")
+        logger.error("Hive API key not configured. Run with --setup first.")
         return 1
 
-    # Initialize Hive service
+    # Get Hive config from MasterConfig
+    hive_cfg = client_config.hive
+    if not hive_cfg.workspace_id or not hive_cfg.user_id:
+        logger.error(
+            f"Hive workspace_id/user_id not found in master config for this client. "
+            f"Check the Hive tab in the Master Config sheet."
+        )
+        return 1
+
+    # Initialize Hive service — API key from local secrets, IDs from master config
     hive = HiveService(
         HiveCredentials(
             api_key=settings.hive_api_key,
-            user_id=settings.hive_user_id,
-            workspace_id=settings.hive_workspace_id,
+            user_id=hive_cfg.user_id,
+            workspace_id=hive_cfg.workspace_id,
         )
     )
 
@@ -494,16 +468,26 @@ def run_extracts(
 
     # Initialize Google Sheets service if requested
     sheets: Optional[SheetsService] = None
+    spreadsheet_id = client_config.sheets.hive_extract_sheet_id
+    credential_ref = client_config.client.google_auth_override or "BosOpt"
+
     if use_sheets:
-        from config import SPREADSHEET_ID
-        sheets = SheetsService(SPREADSHEET_ID)
-        if sheets.authenticate():
-            if not sheets.test_access():
-                logger.warning("Could not access Google Sheet, continuing without Sheets")
-                sheets = None
+        if not spreadsheet_id:
+            logger.error(
+                "hive_extract_sheet_id not found in master config. "
+                "Add it to the Sheets tab in the Master Config sheet, "
+                "or use --no-sheets to skip Sheets output."
+            )
+            return 1
         else:
-            logger.warning("Google Sheets auth failed, continuing without Sheets")
-            sheets = None
+            sheets = SheetsService(spreadsheet_id, credential_ref=credential_ref)
+            if sheets.authenticate():
+                if not sheets.test_access():
+                    logger.warning("Could not access Google Sheet, continuing without Sheets")
+                    sheets = None
+            else:
+                logger.warning("Google Sheets auth failed, continuing without Sheets")
+                sheets = None
 
     # Ensure output directory exists if writing Excel
     if use_excel:
@@ -595,8 +579,9 @@ def run_extracts(
     else:
         notification_msg += "Checks: skipped (Sheets not connected)"
 
-    if settings.google_chat_webhook_url:
-        send_chat_notification(settings.google_chat_webhook_url, notification_msg)
+    webhook_url = client_config.notifications.google_chat_webhook
+    if webhook_url:
+        send_chat_notification(webhook_url, notification_msg)
     else:
         logger.debug("Google Chat webhook not configured, skipping notification")
 
@@ -641,6 +626,12 @@ def main():
         help="End date (YYYY-MM-DD) - default: today",
     )
     parser.add_argument(
+        "--client",
+        type=str,
+        default="LSC",
+        help="Client key in MasterConfig (default: LSC)",
+    )
+    parser.add_argument(
         "--no-sheets",
         action="store_true",
         help="Skip Google Sheets output",
@@ -661,12 +652,29 @@ def main():
         success = run_setup()
         sys.exit(0 if success else 1)
 
-    # Check if settings exist
+    # Check if API key is in the OS keyring
     settings = load_settings()
     if not settings.is_configured():
-        print("Application not configured. Run with --setup first:")
-        print("  python src/main.py --setup")
+        print("Hive API key not found in OS keyring (Service: BosOpt, Username: Hive-APIKey).")
+        print("Run with --setup to configure, or add it manually via:")
+        print("  python -c \"import keyring; keyring.set_password('BosOpt', 'Hive-APIKey', 'YOUR_KEY')\"")
         sys.exit(1)
+
+    # Load master config for the specified client
+    client_key = args.client
+    logger.info(f"Loading master config for client: {client_key}")
+    try:
+        master = MasterConfig()
+        client_config = master.get_client(client_key)
+    except (FileNotFoundError, KeyError) as e:
+        print(f"Error loading master config for client '{client_key}': {e}")
+        sys.exit(1)
+
+    logger.info(
+        f"Client: {client_key}, "
+        f"google_auth={client_config.client.google_auth_override or 'BosOpt'}, "
+        f"hive_extract_sheet_id={client_config.sheets.hive_extract_sheet_id}"
+    )
 
     # Date range — default: today-45 days through today
     to_date = date.today()
@@ -686,13 +694,17 @@ def main():
             sys.exit(1)
 
     mode = args.mode
+    print(f"Client: {client_key}")
     print(f"Mode: {mode}")
     print(f"Date range: {from_date} to {to_date}")
 
     # Run extracts
     use_sheets = not args.no_sheets
     use_excel = args.excel
-    exit_code = run_extracts(from_date, to_date, mode=mode, use_sheets=use_sheets, use_excel=use_excel)
+    exit_code = run_extracts(
+        from_date, to_date, client_config,
+        mode=mode, use_sheets=use_sheets, use_excel=use_excel,
+    )
     sys.exit(exit_code)
 
 

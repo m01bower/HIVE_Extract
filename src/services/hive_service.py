@@ -11,7 +11,7 @@ import time
 import unicodedata
 
 from logger_setup import get_logger
-from config import HIVE_API_BASE_URL, HIVE_GRAPHQL_URL
+from config import HIVE_API_BASE_URL, HIVE_GRAPHQL_URL, EXCLUDED_PROJECTS_ACTIVE, EXCLUDED_PROJECTS_ARCHIVED
 
 logger = get_logger()
 
@@ -287,6 +287,13 @@ class HiveService:
             self._flatten_project(p, user_lookup, archived)
             for p in projects_list
         ]
+        # Filter out projects the API returns but the Hive UI hides
+        excluded_set = EXCLUDED_PROJECTS_ARCHIVED if archived else EXCLUDED_PROJECTS_ACTIVE
+        before = len(flattened)
+        flattened = [p for p in flattened if p.get("Project name", "") not in excluded_set]
+        excluded = before - len(flattened)
+        if excluded:
+            logger.info(f"Excluded {excluded} hidden projects (templates/internal)")
         logger.info(
             f"Retrieved {len(flattened)} {'archived' if archived else 'active'} projects"
         )

@@ -11,11 +11,15 @@ from typing import List, Dict, Any, Tuple
 # Ensure src/ is on the path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from config import SPREADSHEET_ID, TABS
-from settings import load_settings
+from config import TABS
+from settings import load_settings, SHARED_CONFIG_DIR
 from logger_setup import setup_logger, get_logger
 from services.hive_service import HiveService, HiveCredentials
 from services.sheets_service import SheetsService
+
+# Add shared config to path so we can import config_reader
+sys.path.insert(0, str(SHARED_CONFIG_DIR))
+from config_reader import MasterConfig
 
 
 def read_sheet_tab(sheets: SheetsService, tab_name: str, header_row: int, data_start_row: int) -> List[Dict[str, str]]:
@@ -273,11 +277,32 @@ def main():
         print("Not configured. Run: python src/main.py --setup")
         sys.exit(1)
 
+    # Load master config (hardcoded to LSC for this test script)
+    client_key = "LSC"
+    try:
+        master = MasterConfig()
+        client_config = master.get_client(client_key)
+    except (FileNotFoundError, KeyError) as e:
+        print(f"Error loading master config for client '{client_key}': {e}")
+        sys.exit(1)
+
+    hive_cfg = client_config.hive
+    if not hive_cfg.workspace_id or not hive_cfg.user_id:
+        print(f"Hive workspace_id/user_id not found in master config for '{client_key}'.")
+        sys.exit(1)
+
+    spreadsheet_id = client_config.sheets.hive_extract_sheet_id
+    if not spreadsheet_id:
+        print(f"hive_extract_sheet_id not found in master config for '{client_key}'.")
+        sys.exit(1)
+
+    credential_ref = client_config.client.google_auth_override or "BosOpt"
+
     hive = HiveService(
         HiveCredentials(
             api_key=settings.hive_api_key,
-            user_id=settings.hive_user_id,
-            workspace_id=settings.hive_workspace_id,
+            user_id=hive_cfg.user_id,
+            workspace_id=hive_cfg.workspace_id,
         )
     )
 
@@ -287,7 +312,7 @@ def main():
         sys.exit(1)
     print("Hive API connected.")
 
-    sheets = SheetsService(SPREADSHEET_ID)
+    sheets = SheetsService(spreadsheet_id, credential_ref=credential_ref)
     print("Authenticating with Google Sheets...")
     if not sheets.authenticate():
         print("Failed to authenticate with Google Sheets")
