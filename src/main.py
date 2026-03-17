@@ -267,6 +267,101 @@ def _order_data(extract_key: str, data: List[Dict[str, Any]]) -> List[Dict[str, 
     return [{col: row.get(col, "") for col in final_order} for row in data]
 
 
+def _parse_numeric(value: str) -> float:
+    """Parse a numeric string from a sheet cell, handling $, commas, and blanks."""
+    if not value:
+        return 0.0
+    try:
+        return float(value.replace(",", "").replace("$", ""))
+    except ValueError:
+        return 0.0
+
+
+def _sum_column(data: List[Dict[str, Any]], col_name: str) -> float:
+    """Sum a numeric column across all rows in the data."""
+    total = 0.0
+    for row in data:
+        val = row.get(col_name)
+        if val is None or val == "":
+            continue
+        if isinstance(val, (int, float)):
+            total += val
+        elif isinstance(val, str):
+            total += _parse_numeric(val)
+    return total
+
+
+def pre_write_project_check(
+    sheets: SheetsService,
+    active_data: List[Dict[str, Any]],
+    archived_data: List[Dict[str, Any]],
+) -> bool:
+    """Sanity-check before overwriting BillingProject sheets.
+
+    Reads the previous row counts (B2) and combined Amount Awarded total
+    (N2 from BillingProject_RAW, which sums both sheets) before any data
+    is cleared.  Compares against the new combined data.
+
+    Row counts and total awarded should always be >= previous values
+    (projects are added, never deleted).
+
+    Returns True if safe to proceed, False if something looks wrong.
+    A failure logs a WARNING but does NOT block the write.
+    """
+    logger = get_logger()
+
+    tab_active = TABS["active_projects"]["name"]
+    tab_archive = TABS["archived_projects"]["name"]
+
+    # Read previous values before we touch anything
+    prev_active_rows = _parse_numeric(sheets.read_cell(tab_active, "B2"))
+    prev_archive_rows = _parse_numeric(sheets.read_cell(tab_archive, "B2"))
+    # N1 on each sheet = awarded total for that sheet only
+    prev_active_awarded = _parse_numeric(sheets.read_cell(tab_active, "N1"))
+    prev_archive_awarded = _parse_numeric(sheets.read_cell(tab_archive, "N1"))
+
+    prev_total_rows = prev_active_rows + prev_archive_rows
+    prev_total_awarded = prev_active_awarded + prev_archive_awarded
+
+    # Calculate new totals
+    new_active_rows = len(active_data)
+    new_archive_rows = len(archived_data)
+    new_total_rows = new_active_rows + new_archive_rows
+    new_active_awarded = _sum_column(active_data, "Amount Awarded")
+    new_archive_awarded = _sum_column(archived_data, "Amount Awarded")
+    new_total_awarded = new_active_awarded + new_archive_awarded
+
+    logger.info(
+        f"Pre-write check — previous: {prev_total_rows:.0f} rows "
+        f"({prev_active_rows:.0f} active + {prev_archive_rows:.0f} archive), "
+        f"${prev_total_awarded:,.2f} awarded"
+    )
+    logger.info(
+        f"Pre-write check — new: {new_total_rows} rows "
+        f"({new_active_rows} active + {new_archive_rows} archive), "
+        f"${new_total_awarded:,.2f} awarded"
+    )
+
+    ok = True
+    if new_total_rows < prev_total_rows:
+        logger.warning(
+            f"PRE-WRITE CHECK: Combined row count DROPPED from "
+            f"{prev_total_rows:.0f} to {new_total_rows}"
+        )
+        ok = False
+    if prev_total_awarded > 0 and new_total_awarded < prev_total_awarded:
+        logger.warning(
+            f"PRE-WRITE CHECK: Combined Amount Awarded DROPPED from "
+            f"${prev_total_awarded:,.2f} to ${new_total_awarded:,.2f}"
+        )
+        ok = False
+
+    if ok:
+        logger.info("Pre-write check PASSED")
+
+    return ok
+
+
 def write_to_sheets(
     sheets: SheetsService,
     extract_key: str,
@@ -318,9 +413,13 @@ def process_extract(
     to_date: Optional[date] = None,
     sheets: Optional[SheetsService] = None,
     write_excel: bool = False,
+    prefetched_data: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict:
     """
     Process a single extract — fetch data from Hive, write to Excel and Sheets.
+
+    Args:
+        prefetched_data: If provided, skip the Hive API call and use this data.
 
     Returns:
         Result dict with status, rows, and any error
@@ -334,10 +433,12 @@ def process_extract(
 
     t0 = time.time()
     try:
-        # Fetch data based on extract type
-        data: List[Dict[str, Any]] = []
+        # Use prefetched data or fetch from Hive
+        data: List[Dict[str, Any]] = prefetched_data if prefetched_data is not None else []
 
-        if extract_key == "active_projects":
+        if prefetched_data is not None:
+            pass  # already have the data
+        elif extract_key == "active_projects":
             data = hive.get_projects(archived=False)
         elif extract_key == "archived_projects":
             data = hive.get_projects(archived=True)
@@ -501,10 +602,26 @@ def run_extracts(
 
     # 1. Projects (active, archived, combined)
     if run_projects:
-        project_keys = ["active_projects", "archived_projects", "all_projects"]
-        for key in project_keys:
+        # Fetch active and archived data first (before any writes)
+        logger.info("Fetching project data from Hive...")
+        active_data = hive.get_projects(archived=False)
+        archived_data = hive.get_projects(archived=True)
+
+        # Pre-write sanity check: compare new totals against existing sheet data
+        if sheets:
+            pre_write_project_check(sheets, active_data, archived_data)
+
+        # Now process each extract using the prefetched data
+        for key, data in [
+            ("active_projects", active_data),
+            ("archived_projects", archived_data),
+            ("all_projects", active_data + archived_data),
+        ]:
             config = EXTRACTS[key]
-            result = process_extract(hive, key, config, from_date, to_date, sheets, use_excel)
+            result = process_extract(
+                hive, key, config, from_date, to_date, sheets, use_excel,
+                prefetched_data=data,
+            )
             results[config["filename"]] = result
 
     # 2. MonthEXACT (time tracking entries)
