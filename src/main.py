@@ -29,7 +29,12 @@ from logger_setup import setup_logger, get_logger
 from services.hive_service import HiveService, HiveCredentials
 from services.sheets_service import SheetsService
 from notification import send_chat_notification
-from gui.date_picker import select_date_range
+
+# GUI import is deferred — not available on headless servers
+try:
+    from gui.date_picker import select_date_range
+except ImportError:
+    select_date_range = None
 
 # Add shared config to path so we can import config_reader
 sys.path.insert(0, str(SHARED_CONFIG_DIR))
