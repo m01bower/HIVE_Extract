@@ -128,5 +128,15 @@ EXCLUDED_PROJECTS_ARCHIVED = {
     "Prospect Review Template",
 }
 
+# Test tabs for monthly aggregation comparison (do NOT overwrite production tabs)
+TEST_TABS = {
+    "month_raw_test": {"name": "Month_RAW_TEST", "header_row": 4, "data_start_row": 5},
+    "year_raw_test": {"name": "Year_RAW_TEST", "header_row": 4, "data_start_row": 5},
+}
+TEST_YEAR_TABS = {
+    f"ALL_{year}_test": {"name": f"ALL_{year}_TEST", "header_row": 5, "data_start_row": 6}
+    for year in range(2020, 2027)
+}
+
 # Checks tab — used to validate data after extracts complete
 CHECKS_TAB = {"name": "Checks", "cell": "A3"}

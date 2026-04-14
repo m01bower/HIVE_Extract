@@ -1,0 +1,133 @@
+HIVE TIME ENTRY DISCREPANCY — DETAILED RECORD IDs
+Date Range: 2026-01-01 to 2026-02-18 (2026 YTD)
+Generated: 2026-02-18
+Workspace ID: aKXG39vFQYtRAkmv6
+
+Test: Same data queried as one request (full range) vs monthly splits.
+Single request: 687 rows | Split requests: 688 rows
+Total discrepancies: 2
+
+======================================================================
+PATTERN SUMMARY
+======================================================================
+  Rows missing from single request (month-end dates): 1
+  Rows missing from single request (other dates): 0
+  Rows missing from split requests: 0
+  Rows with different hours: 1
+
+======================================================================
+MISSING MONTH-END ENTRIES — Individual Time Entry Records
+These entries exist in monthly queries but vanish in the full-range query.
+======================================================================
+
+  [1] Matthew Wallace | 2026-01-31 | CUP - 2026 (FY27) NYC Council Discretionary Funding Application (EDT General)
+       Hours in split request: 2.35
+       Hours in single request: MISSING
+       Matching detail time entries: 5
+
+       TIME ENTRY RECORD:
+         Time Entry ID:  eypzj4DdTiy44FhsN
+         Action Card ID: PLGcsD4Jonb5fxAYX
+         Action Title:   Prepare Draft
+         Action URL:     https://app.hive.com/workspace/aKXG39vFQYtRAkmv6/action-flat/PLGcsD4Jonb5fxAYX
+         User ID:        FDb6rqnDZQGfD255A
+         User Name:      Matthew Wallace
+         Date:           2026-01-31
+         Time (seconds): 2571
+         Time (minutes): 42.85
+         Time (hours):   0.71
+         Description:    (none)
+         Automated:      True
+         Category ID:    (none)
+         Project ID:     YMLSu6XXQGcD8LRbR
+
+       TIME ENTRY RECORD:
+         Time Entry ID:  LPYovaMwYKyfnS2XJ
+         Action Card ID: PLGcsD4Jonb5fxAYX
+         Action Title:   Prepare Draft
+         Action URL:     https://app.hive.com/workspace/aKXG39vFQYtRAkmv6/action-flat/PLGcsD4Jonb5fxAYX
+         User ID:        FDb6rqnDZQGfD255A
+         User Name:      Matthew Wallace
+         Date:           2026-01-31
+         Time (seconds): 702
+         Time (minutes): 11.7
+         Time (hours):   0.2
+         Description:    (none)
+         Automated:      True
+         Category ID:    (none)
+         Project ID:     YMLSu6XXQGcD8LRbR
+
+       TIME ENTRY RECORD:
+         Time Entry ID:  2XSPegumPGakwyoPx
+         Action Card ID: PLGcsD4Jonb5fxAYX
+         Action Title:   Prepare Draft
+         Action URL:     https://app.hive.com/workspace/aKXG39vFQYtRAkmv6/action-flat/PLGcsD4Jonb5fxAYX
+         User ID:        FDb6rqnDZQGfD255A
+         User Name:      Matthew Wallace
+         Date:           2026-01-31
+         Time (seconds): 1921
+         Time (minutes): 32.02
+         Time (hours):   0.53
+         Description:    (none)
+         Automated:      True
+         Category ID:    (none)
+         Project ID:     YMLSu6XXQGcD8LRbR
+
+       TIME ENTRY RECORD:
+         Time Entry ID:  yDN47dX6jw7tsrJkJ
+         Action Card ID: PLGcsD4Jonb5fxAYX
+         Action Title:   Prepare Draft
+         Action URL:     https://app.hive.com/workspace/aKXG39vFQYtRAkmv6/action-flat/PLGcsD4Jonb5fxAYX
+         User ID:        FDb6rqnDZQGfD255A
+         User Name:      Matthew Wallace
+         Date:           2026-01-31
+         Time (seconds): 563
+         Time (minutes): 9.38
+         Time (hours):   0.16
+         Description:    (none)
+         Automated:      True
+         Category ID:    (none)
+         Project ID:     YMLSu6XXQGcD8LRbR
+
+       TIME ENTRY RECORD:
+         Time Entry ID:  ad2B3SaAzz4KoTi4P
+         Action Card ID: PLGcsD4Jonb5fxAYX
+         Action Title:   Prepare Draft
+         Action URL:     https://app.hive.com/workspace/aKXG39vFQYtRAkmv6/action-flat/PLGcsD4Jonb5fxAYX
+         User ID:        FDb6rqnDZQGfD255A
+         User Name:      Matthew Wallace
+         Date:           2026-01-31
+         Time (seconds): 2700
+         Time (minutes): 45.0
+         Time (hours):   0.75
+         Description:    Work on the YE General app specifically
+         Automated:      False
+         Category ID:    (none)
+         Project ID:     YMLSu6XXQGcD8LRbR
+
+======================================================================
+HOURS DIFFER — Entries where single request shows MORE hours
+The extra hours likely come from the missing month-end entries above.
+======================================================================
+
+  [1] Matthew Wallace | 2026-01-12 | CUP - 2026 (FY27) NYC Council Discretionary Funding Application (EDT General)
+       Hours single:  14.99
+       Hours split:   12.65
+       Excess:        +2.34 hrs
+       Detail entries: 1
+
+       TIME ENTRY RECORD:
+         Time Entry ID:  2H2HFbnZrim4uoywz
+         Action Card ID: jQxDowm2r7Emy6FSf
+         Action Title:   Project Management
+         Action URL:     https://app.hive.com/workspace/aKXG39vFQYtRAkmv6/action-flat/jQxDowm2r7Emy6FSf
+         User ID:        FDb6rqnDZQGfD255A
+         User Name:      Matthew Wallace
+         Date:           2026-01-12
+         Time (seconds): 900
+         Time (minutes): 15.0
+         Time (hours):   0.25
+         Description:    Youth programming general: 1/12 check-in call with Jamie and Christyna
+         Automated:      False
+         Category ID:    (none)
+         Project ID:     YMLSu6XXQGcD8LRbR

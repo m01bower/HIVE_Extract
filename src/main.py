@@ -666,16 +666,21 @@ def run_extracts(
     total_rows = sum(r.get("rows", 0) for r in results.values())
     print(f"\n  Total: {total_rows} rows, {total_elapsed:.1f}s elapsed")
 
-    # --- Checks validation ---
+    # --- Checks validation (delay to let Sheets recalculate after bulk writes) ---
     checks_value = ""
     checks_ok = False
+    checks_location = f"{CHECKS_TAB['name']}!{CHECKS_TAB['cell']}"
     if sheets:
-        checks_value = sheets.read_cell(CHECKS_TAB["name"], CHECKS_TAB["cell"]).strip()
+        time.sleep(30)
+        try:
+            checks_value = sheets.read_cell(CHECKS_TAB["name"], CHECKS_TAB["cell"]).strip()
+        except Exception:
+            checks_value = f"N/A (could not read {checks_location})"
         checks_ok = checks_value.upper() == "ALL GOOD"
         if checks_ok:
             logger.info("Checks validation: ALL GOOD")
         else:
-            logger.warning(f"Checks validation: PROBLEMS DETECTED — {checks_value!r}")
+            logger.warning(f"Checks validation: PROBLEMS DETECTED — {checks_value!r} (see {checks_location})")
 
     # --- Google Chat notification ---
     notification_msg = f"HIVE Extract complete ({total_elapsed:.1f}s)\n"
@@ -702,7 +707,29 @@ def run_extracts(
     else:
         logger.debug("Google Chat webhook not configured, skipping notification")
 
-    return 0 if error_count == 0 else 1
+    # Build structured result for JSON output
+    result_dict = {
+        "status": "success" if error_count == 0 else "partial",
+        "results": {k: {
+            "description": v.get("description", k),
+            "status": v["status"],
+            "rows": v.get("rows", 0),
+            "time": round(v.get("time", 0), 1),
+            "error": v.get("error"),
+        } for k, v in results.items()},
+        "checks": checks_value if not checks_ok else "ALL GOOD",
+        "checks_ok": checks_ok,
+        "checks_location": checks_location if not checks_ok else "",
+        "total_rows": total_rows,
+        "success_count": success_count,
+        "error_count": error_count,
+        "elapsed": round(total_elapsed, 1),
+        "mode": mode,
+        "from_date": from_date.isoformat(),
+        "to_date": to_date.isoformat(),
+    }
+
+    return result_dict
 
 
 def main():
@@ -757,6 +784,11 @@ def main():
         "--excel",
         action="store_true",
         help="Also write Excel files locally (default: Sheets only)",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Output structured JSON result to stdout (for portal/scheduler integration)",
     )
 
     args = parser.parse_args()
@@ -818,11 +850,18 @@ def main():
     # Run extracts
     use_sheets = not args.no_sheets
     use_excel = args.excel
-    exit_code = run_extracts(
+    result = run_extracts(
         from_date, to_date, client_config,
         mode=mode, use_sheets=use_sheets, use_excel=use_excel,
     )
-    sys.exit(exit_code)
+
+    # Output JSON for portal/scheduler integration
+    if args.json:
+        import json as _json
+        print("---JSON_RESULT---")
+        print(_json.dumps(result))
+
+    sys.exit(0 if result["error_count"] == 0 else 1)
 
 
 if __name__ == "__main__":

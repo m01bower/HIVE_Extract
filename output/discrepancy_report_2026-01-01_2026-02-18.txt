@@ -1,0 +1,47 @@
+Hive Timesheet Data Discrepancy Report
+Date Range: 2026-01-01 to 2026-02-18
+Generated: 2026-02-18
+Workspace: aKXG39vFQYtRAkmv6
+
+======================================================================
+API Self-Consistency Discrepancies
+======================================================================
+
+────────────────────────────────────────────────────────────────────────────────
+DISCREPANT RECORDS — Single Request vs Split Requests
+────────────────────────────────────────────────────────────────────────────────
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MISSING ROWS (1)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  [1] missing_from_Single Request
+      Person:   Matthew Wallace
+      Date:     2026-01-31
+      Project:  CUP - 2026 (FY27) NYC Council Discretionary Funding Application (EDT General)
+      Hours (Single Request): 0
+      Hours (Split Requests): 2.35
+      Detail entries found: 5
+      Action Cards (1):
+        - Prepare Draft (2.34 hrs)
+          https://app.hive.com/workspace/aKXG39vFQYtRAkmv6/action-flat/PLGcsD4Jonb5fxAYX
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ROWS WITH DIFFERENT HOURS (1)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  [1] Matthew Wallace | 2026-01-12 | CUP - 2026 (FY27) NYC Council Discretionary Funding Application (EDT General)
+       Single Request: 14.99 hrs
+       Split Requests: 12.65 hrs
+       Difference: +2.34 hrs
+       Detail API total: 0.25 hrs
+       Detail entries: 1
+       Action Cards (1):
+         - Project Management (0.25 hrs)
+           https://app.hive.com/workspace/aKXG39vFQYtRAkmv6/action-flat/jQxDowm2r7Emy6FSf
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ALL AFFECTED ACTION CARD URLs (2)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  https://app.hive.com/workspace/aKXG39vFQYtRAkmv6/action-flat/PLGcsD4Jonb5fxAYX
+  https://app.hive.com/workspace/aKXG39vFQYtRAkmv6/action-flat/jQxDowm2r7Emy6FSf

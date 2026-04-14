@@ -110,6 +110,7 @@ class HiveService:
         graphql_headers = {"user_id": self.credentials.user_id}
 
         last_error = None
+        last_response_body = ""
         for attempt in range(retries):
             try:
                 response = self.session.post(
@@ -118,7 +119,12 @@ class HiveService:
                     headers=graphql_headers,
                     timeout=120,
                 )
-                response.raise_for_status()
+                if not response.ok:
+                    last_response_body = response.text[:1000]
+                    logger.error(
+                        f"GraphQL HTTP {response.status_code}: {last_response_body}"
+                    )
+                    response.raise_for_status()
                 result = response.json()
                 if "errors" in result:
                     msgs = [e.get("message", str(e)) for e in result["errors"]]
@@ -132,8 +138,9 @@ class HiveService:
                 if attempt < retries - 1:
                     time.sleep(retry_delay * (attempt + 1))
 
+        detail = f" | Response: {last_response_body}" if last_response_body else ""
         raise Exception(
-            f"GraphQL request failed after {retries} attempts: {last_error}"
+            f"GraphQL request failed after {retries} attempts: {last_error}{detail}"
         )
 
     # ------------------------------------------------------------------
@@ -259,6 +266,34 @@ class HiveService:
             return cf.get("value", "")
 
     # ------------------------------------------------------------------
+    # Time categories — resolve categoryId to human-readable name
+    # ------------------------------------------------------------------
+
+    def get_time_categories(self) -> Dict[str, str]:
+        """Fetch time categories for the workspace. Returns {categoryId: name}."""
+        workspace_id = self.credentials.workspace_id
+        if not workspace_id:
+            return {}
+
+        query = """
+        query GetTimeCategories($workspaceId: ID!) {
+          getTimeCategories(workspaceId: $workspaceId) {
+            _id
+            name
+          }
+        }
+        """
+        try:
+            result = self._execute_query(query, {"workspaceId": workspace_id})
+            categories = result.get("getTimeCategories", [])
+            lookup = {c["_id"]: c.get("name", "") for c in categories if c.get("_id")}
+            logger.info(f"Loaded {len(lookup)} time categories")
+            return lookup
+        except Exception as e:
+            logger.warning(f"Could not fetch time categories: {e}")
+            return {}
+
+    # ------------------------------------------------------------------
     # BillingProject_RAW  /  BillingProject_RAW_Archive
     # ------------------------------------------------------------------
 
@@ -365,6 +400,9 @@ class HiveService:
     ) -> List[Dict[str, Any]]:
         """Fetch time tracking entries formatted for MonthEXACT_RAW.
 
+        Uses getActionsByWorkspace with pagination since Hive removed
+        the getTimeTrackingData query (April 2026).
+
         Columns: Project, Parent Project, Time Tracked By, Action Title,
         Time Tracked Date, Tracked (Minutes), Tracked (HH:mm),
         Estimated (Minutes), Estimated (HH:mm), Description, Labels
@@ -378,136 +416,270 @@ class HiveService:
         user_lookup = self.get_workspace_users()
 
         query = """
-        query GetTimeTrackingData($workspaceId: ID!, $startDate: Date, $endDate: Date) {
-          getTimeTrackingData(workspaceId: $workspaceId, startDate: $startDate, endDate: $endDate) {
-            actions {
-              _id
-              title
-              project {
+        query GetActions($workspaceId: ID!, $first: Int, $after: ID) {
+          getActionsByWorkspace(
+            workspaceId: $workspaceId,
+            first: $first,
+            after: $after,
+            excludeCompletedActions: false
+          ) {
+            edges {
+              node {
                 _id
-                name
-                parentProject
-              }
-              labels
-              timeTracking {
-                actualList {
-                  id
-                  userId
-                  time
-                  date
-                  description
-                  automated
-                  categoryId
+                title
+                project {
+                  _id
+                  name
+                  parentProject
                 }
-                estimate
+                labels
+                timeTracking {
+                  actualList {
+                    id
+                    userId
+                    time
+                    date
+                    description
+                    automated
+                    categoryId
+                  }
+                  estimate
+                }
               }
+              cursor
             }
-            projects {
-              _id
-              name
-              parentProject
-            }
+            pageInfo { hasNextPage endCursor }
           }
         }
         """
 
-        variables = {
-            "workspaceId": workspace_id,
-            "startDate": from_date.isoformat(),
-            "endDate": to_date.isoformat(),
-        }
-
-        result = self._execute_query(query, variables)
-        ttd = result.get("getTimeTrackingData", {})
-        actions = ttd.get("actions", [])
-
-        # Build project-id → name lookup (including parent resolution)
-        project_name_lookup: Dict[str, str] = {}
-        project_parent_lookup: Dict[str, str] = {}
-        for p in ttd.get("projects", []):
-            pid = p.get("_id", "")
-            project_name_lookup[pid] = p.get("name", "")
-            pp = p.get("parentProject")
-            if pp:
-                project_parent_lookup[pid] = pp
-
-        def resolve_parent(project_id: str) -> str:
-            parent_id = project_parent_lookup.get(project_id, "")
-            if parent_id:
-                return project_name_lookup.get(parent_id, "")
-            return ""
-
-        all_entries: List[Dict[str, Any]] = []
-        for action in actions:
-            tracking = action.get("timeTracking") or {}
-            actual_list = tracking.get("actualList") or []
-            if not actual_list:
-                continue
-
-            project = action.get("project") or {}
-            project_id = project.get("_id", "")
-            project_name = project.get("name", "")
-
-            # Resolve parent project name
-            parent_project_id = project.get("parentProject", "")
-            parent_name = project_name_lookup.get(parent_project_id, "") if parent_project_id else ""
-
-            action_title = action.get("title", "")
-
-            # Labels (returned as IDs — include as-is for now)
-            labels_list = action.get("labels") or []
-            labels_str = ", ".join(str(l) for l in labels_list) if labels_list else ""
-
-            # Overall estimate in seconds
-            overall_estimate = tracking.get("estimate", 0) or 0
-
-            for entry in actual_list:
-                uid = entry.get("userId", "")
-                user_info = user_lookup.get(uid, {})
-                # Fallback: resolve missing users individually (e.g. terminated)
-                if uid and not user_info:
-                    user_info = self.resolve_user(uid)
-
-                time_seconds = entry.get("time", 0) or 0
-                tracked_minutes = round(time_seconds / 60, 2)
-
-                est_minutes = round(overall_estimate / 60, 2) if overall_estimate else 0
-
-                raw_date = entry.get("date", "")
-                if isinstance(raw_date, str) and "T" in raw_date:
-                    raw_date = raw_date.split("T")[0]
-
-                row: Dict[str, Any] = {
-                    "Project": project_name,
-                    "Parent Project": parent_name,
-                    "Time Tracked By": user_info.get("fullName", ""),
-                    "Action Title": action_title,
-                    "Time Tracked Date": raw_date,
-                    "Tracked (Minutes)": tracked_minutes,
-                    "Tracked (HH:mm)": self._minutes_to_hhmm(tracked_minutes),
-                    "Estimated (Minutes)": est_minutes,
-                    "Estimated (HH:mm)": self._minutes_to_hhmm(est_minutes),
-                    "Description": entry.get("description", ""),
-                    "Labels": labels_str,
-                }
-
-                # Include any extra fields from the entry dynamically
-                for k, v in entry.items():
-                    if k not in ("id", "userId", "time", "date", "description", "automated", "categoryId"):
-                        row.setdefault(k, v)
-
-                all_entries.append(row)
-
-        # Filter to requested date range — Hive API may return extras
         from_str = from_date.isoformat()
         to_str = to_date.isoformat()
-        filtered = [
-            e for e in all_entries
-            if e.get("Time Tracked Date") and from_str <= e["Time Tracked Date"] <= to_str
-        ]
 
-        logger.info(f"Retrieved {len(all_entries)} time entries, {len(filtered)} in date range")
-        return filtered
+        # Build project-name lookup from paginated results
+        project_name_lookup: Dict[str, str] = {}
+
+        all_entries: List[Dict[str, Any]] = []
+        cursor = None
+        page = 0
+        total_actions = 0
+        page_size = 100
+
+        while True:
+            page += 1
+            variables: Dict[str, Any] = {
+                "workspaceId": workspace_id,
+                "first": page_size,
+            }
+            if cursor:
+                variables["after"] = cursor
+
+            result = self._execute_query(query, variables)
+            connection = result.get("getActionsByWorkspace", {})
+            edges = connection.get("edges", [])
+            total_actions += len(edges)
+
+            for edge in edges:
+                action = edge.get("node", {})
+                tracking = action.get("timeTracking") or {}
+                actual_list = tracking.get("actualList") or []
+                if not actual_list:
+                    continue
+
+                project = action.get("project") or {}
+                project_id = project.get("_id", "")
+                project_name = project.get("name", "")
+                parent_project_id = project.get("parentProject", "")
+
+                # Cache project names for parent resolution
+                if project_id and project_name:
+                    project_name_lookup[project_id] = project_name
+
+                parent_name = (
+                    project_name_lookup.get(parent_project_id, "")
+                    if parent_project_id
+                    else ""
+                )
+
+                action_title = action.get("title", "")
+
+                labels_list = action.get("labels") or []
+                labels_str = (
+                    ", ".join(str(l) for l in labels_list) if labels_list else ""
+                )
+
+                overall_estimate = tracking.get("estimate", 0) or 0
+
+                for entry in actual_list:
+                    raw_date = entry.get("date", "")
+                    if isinstance(raw_date, str) and "T" in raw_date:
+                        raw_date = raw_date.split("T")[0]
+
+                    # Skip entries outside the date range early
+                    if not raw_date or raw_date < from_str or raw_date > to_str:
+                        continue
+
+                    uid = entry.get("userId", "")
+                    user_info = user_lookup.get(uid, {})
+                    if uid and not user_info:
+                        user_info = self.resolve_user(uid)
+
+                    time_seconds = entry.get("time", 0) or 0
+                    tracked_minutes = round(time_seconds / 60, 2)
+                    est_minutes = (
+                        round(overall_estimate / 60, 2) if overall_estimate else 0
+                    )
+
+                    row: Dict[str, Any] = {
+                        "Project": project_name,
+                        "Parent Project": parent_name,
+                        "Time Tracked By": user_info.get("fullName", ""),
+                        "Action Title": action_title,
+                        "Time Tracked Date": raw_date,
+                        "Tracked (Minutes)": tracked_minutes,
+                        "Tracked (HH:mm)": self._minutes_to_hhmm(tracked_minutes),
+                        "Estimated (Minutes)": est_minutes,
+                        "Estimated (HH:mm)": self._minutes_to_hhmm(est_minutes),
+                        "Description": entry.get("description", ""),
+                        "Labels": labels_str,
+                    }
+
+                    # Preserve categoryId for monthly aggregation
+                    row["categoryId"] = entry.get("categoryId", "")
+
+                    for k, v in entry.items():
+                        if k not in (
+                            "id", "userId", "time", "date",
+                            "description", "automated", "categoryId",
+                        ):
+                            row.setdefault(k, v)
+
+                    all_entries.append(row)
+
+            page_info = connection.get("pageInfo", {})
+            if not page_info.get("hasNextPage"):
+                break
+            cursor = page_info.get("endCursor")
+
+        logger.info(
+            f"Scanned {total_actions} actions ({page} pages), "
+            f"found {len(all_entries)} time entries in date range"
+        )
+        return all_entries
+
+    # ------------------------------------------------------------------
+    # Monthly-aggregated time entries (replaces broken CSV endpoint)
+    # ------------------------------------------------------------------
+
+    def get_time_entries_monthly(
+        self,
+        from_date: date,
+        to_date: date,
+    ) -> List[Dict[str, Any]]:
+        """Fetch time entries and aggregate by Person + Project + Category + Month.
+
+        Uses getActionsByWorkspace (working endpoint) as the data source,
+        then groups and sums hours to produce the same shape as the broken
+        getTimesheetReportingCsvExportData endpoint — but at monthly
+        granularity instead of daily.
+
+        Returns rows sorted by Person, Project, Category, Month.
+        """
+        logger.info(
+            f"Fetching time entries for monthly aggregation: {from_date} to {to_date}"
+        )
+
+        # Get category names so we can resolve categoryId → name
+        category_lookup = self.get_time_categories()
+
+        # Get all daily time entries (reuse existing method)
+        daily_entries = self.get_time_entries(from_date, to_date)
+        if not daily_entries:
+            return []
+
+        # Build user email/role lookup
+        user_lookup = self.get_workspace_users()
+
+        # Build project metadata lookup from project data
+        project_meta = self._build_project_metadata_lookup()
+
+        # Aggregate: group by (Person, Email, Project, Category, Month)
+        from collections import defaultdict
+        agg: Dict[tuple, Dict[str, Any]] = {}
+
+        for entry in daily_entries:
+            person = entry.get("Time Tracked By", "")
+            project_name = entry.get("Project", "")
+            raw_date = entry.get("Time Tracked Date", "")
+
+            # Resolve category name from categoryId
+            category_id = entry.get("categoryId", "")
+            category_name = category_lookup.get(category_id, "") if category_id else ""
+
+            # Month key: first day of the month
+            if raw_date and len(raw_date) >= 7:
+                month_key = raw_date[:7] + "-01"  # YYYY-MM-01
+            else:
+                continue
+
+            # Find user email from the user lookup
+            email = ""
+            role = ""
+            for uid, info in user_lookup.items():
+                if info.get("fullName") == person:
+                    email = info.get("email", "")
+                    break
+
+            # Aggregation key
+            key = (person, email, project_name, category_name, month_key)
+
+            if key not in agg:
+                # Get project metadata
+                meta = project_meta.get(project_name, {})
+                agg[key] = {
+                    "Person": person,
+                    "Email": email,
+                    "Project": project_name,
+                    "Client Name": meta.get("Client Name", ""),
+                    "Category": category_name,
+                    "Date unit": "Month",
+                    "Date": month_key,
+                    "Hours": 0.0,
+                }
+            agg[key]["Hours"] += entry.get("Tracked (Minutes)", 0) / 60
+
+        # Round hours only after all entries are summed
+        for row in agg.values():
+            row["Hours"] = round(row["Hours"], 2)
+
+        # Sort by Person, Project, Category, Date
+        rows = sorted(agg.values(), key=lambda r: (
+            r["Person"], r["Project"], r["Category"], r["Date"]
+        ))
+
+        logger.info(
+            f"Aggregated {len(daily_entries)} daily entries into "
+            f"{len(rows)} monthly rows"
+        )
+        return rows
+
+    def _build_project_metadata_lookup(self) -> Dict[str, Dict[str, Any]]:
+        """Build a project name → metadata dict from active + archived projects.
+
+        Used to enrich time entries with Client Name and other project fields.
+        """
+        try:
+            active = self.get_projects(archived=False)
+            archived = self.get_projects(archived=True)
+            lookup = {}
+            for p in active + archived:
+                name = p.get("Project name", "")
+                if name:
+                    lookup[name] = p
+            return lookup
+        except Exception as e:
+            logger.warning(f"Could not build project metadata lookup: {e}")
+            return {}
 
     # ------------------------------------------------------------------
     # Month_RAW / Year_RAW / ALL_YYYY  —  timesheet reporting CSV
