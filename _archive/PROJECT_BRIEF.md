@@ -144,17 +144,21 @@ HIVE_Extract/
 ## CLI Usage
 
 ```bash
-# Default: all extracts, last 45 days, write to Google Sheets
+# Default: everything (projects + time entries + All tab refresh), last 45 days
 python src/main.py
 
-# Projects only
+# Projects only (Active, Archived, Combined). Ignores date range.
 python src/main.py projects
 
-# Time tracking only
-python src/main.py monthexact
-
-# Custom date range
+# Custom date range (applies to MonthEXACT_RAW slice in "everything" mode;
+# the All tab always covers full history 2020-01-01..today).
 python src/main.py --from-date 2026-01-01 --to-date 2026-03-17
+
+# Control the All tab write (mode=all only):
+#   skip (default for CLI when omitted, BUT the portal always passes prod)
+#   test (writes to All_TEST — safe rollout / parity check)
+#   prod (overwrites the live All tab — replaces the legacy LET formula)
+python src/main.py all --all-tab=prod
 
 # Skip Sheets, write Excel locally
 python src/main.py --no-sheets --excel
@@ -165,6 +169,12 @@ python src/main.py --client LSC
 # Setup wizard (configure API key)
 python src/main.py --setup
 ```
+
+> **Modes retired 2026-05-13:** `monthexact` and `hive_report`. The work each
+> did is folded into `mode=all` (time entries) and `mode=all --all-tab=prod`
+> (All tab refresh). Single fetch, dual write — MonthEXACT_RAW and the All
+> tab are guaranteed to agree. See [APP_REGISTRY](../APP_REGISTRY.md) for
+> cross-app dependents of HIVE_Extract modes.
 
 ## Data Integrity Features
 
