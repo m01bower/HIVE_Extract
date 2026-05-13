@@ -498,6 +498,175 @@ def process_extract(
         return {"status": "error", "rows": 0, "error": str(e), "time": elapsed}
 
 
+def _write_all_tab(
+    sheets: SheetsService,
+    enriched_rows: List[Dict[str, Any]],
+    target_tab_key: str,
+) -> dict:
+    """Write enriched monthly aggregation to the All (or All_TEST) tab.
+
+    Clears row 4 down through column AZ to overwrite any legacy spill formula
+    (the live All tab has a giant LET in A4 that stacks ALL_YYYY tabs — this
+    refactor replaces that with code-owned rows).
+
+    Writes canonical headers (row 4) and data (row 5+) using the column order
+    from COLUMN_ORDER["all_enriched"]. The Month tab is left alone — its
+    =FILTER(All!A5:Z, ...) formula auto-follows whatever lands in All.
+    """
+    logger = get_logger()
+    start = time.time()
+
+    tab_config = TABS.get(target_tab_key)
+    if not tab_config:
+        return {"status": "error", "error": f"Unknown tab key: {target_tab_key}",
+                "rows": 0, "time": 0, "description": f"All-tab write ({target_tab_key})"}
+
+    tab_name = tab_config["name"]
+    description = f"All tab → {tab_name}"
+
+    if not enriched_rows:
+        return {"status": "error", "description": description,
+                "error": "No enriched rows to write", "rows": 0, "time": 0}
+
+    canonical = COLUMN_ORDER["all_enriched"]
+    svc = sheets._shared.service
+    ss_id = sheets._shared._default_spreadsheet_id
+
+    clear_range = f"'{tab_name}'!A4:AZ50000"
+    logger.info(f"Clearing {clear_range} ...")
+    svc.spreadsheets().values().clear(spreadsheetId=ss_id, range=clear_range).execute()
+
+    header_values = [canonical]
+    logger.info(f"Writing canonical headers to '{tab_name}'!A4 ...")
+    svc.spreadsheets().values().update(
+        spreadsheetId=ss_id,
+        range=f"'{tab_name}'!A4",
+        valueInputOption="RAW",
+        body={"values": header_values},
+    ).execute()
+
+    data_values = [[r.get(c, "") for c in canonical] for r in enriched_rows]
+    logger.info(f"Writing {len(data_values):,} data rows to '{tab_name}'!A5 ...")
+    result = svc.spreadsheets().values().update(
+        spreadsheetId=ss_id,
+        range=f"'{tab_name}'!A5",
+        valueInputOption="USER_ENTERED",
+        body={"values": data_values},
+    ).execute()
+    rows_written = int(result.get("updatedRows", 0) or 0)
+
+    sheets.update_timestamp(tab_name, cell="C1")
+
+    elapsed = round(time.time() - start, 1)
+    total_hours = round(sum(r.get("Hours", 0) for r in enriched_rows), 2)
+    logger.info(
+        f"All tab complete ({tab_name}): {rows_written} rows, "
+        f"{total_hours:,.2f} hours, {elapsed}s"
+    )
+    return {
+        "status": "success",
+        "description": description,
+        "rows": rows_written,
+        "total_hours": total_hours,
+        "time": elapsed,
+    }
+
+
+def _consistency_check(
+    daily_entries: List[Dict[str, Any]],
+    enriched_rows: List[Dict[str, Any]],
+    me_from: date,
+    me_to: date,
+) -> Dict[str, Any]:
+    """Verify the All aggregation matches the raw daily entries.
+
+    Because both views are derived from the SAME in-memory daily_entries list,
+    total hours must match within rounding (0.01 hr). A mismatch means the
+    aggregation lost or double-counted data — fail loudly.
+
+    Also reports the MonthEXACT_RAW slice total + this-month / this-year totals
+    from both sides for the user's visual sanity check.
+    """
+    logger = get_logger()
+
+    def _sum_minutes_to_hours(entries: List[Dict[str, Any]]) -> float:
+        return round(sum(e.get("Tracked (Minutes)", 0) or 0 for e in entries) / 60.0, 2)
+
+    def _sum_enriched(rows: List[Dict[str, Any]]) -> float:
+        return round(sum(r.get("Hours", 0) or 0 for r in rows), 2)
+
+    daily_total = _sum_minutes_to_hours(daily_entries)
+    enriched_total = _sum_enriched(enriched_rows)
+    drift = round(enriched_total - daily_total, 2)
+
+    # MonthEXACT slice (user date range) — raw entries only
+    me_from_s, me_to_s = me_from.isoformat(), me_to.isoformat()
+    me_entries = [
+        e for e in daily_entries
+        if me_from_s <= (e.get("Time Tracked Date") or "") <= me_to_s
+    ]
+    me_total = _sum_minutes_to_hours(me_entries)
+
+    # This-month / this-year totals (raw vs aggregated)
+    today = date.today()
+    month_start = date(today.year, today.month, 1)
+    month_key = month_start.isoformat()
+    year_prefix = f"{today.year}-"
+
+    raw_this_month = _sum_minutes_to_hours([
+        e for e in daily_entries
+        if (e.get("Time Tracked Date") or "").startswith(month_key[:7])
+    ])
+    raw_this_year = _sum_minutes_to_hours([
+        e for e in daily_entries
+        if (e.get("Time Tracked Date") or "").startswith(str(today.year))
+    ])
+    agg_this_month = _sum_enriched([
+        r for r in enriched_rows if r.get("Date") == month_key
+    ])
+    agg_this_year = _sum_enriched([
+        r for r in enriched_rows
+        if (r.get("Date") or "").startswith(year_prefix)
+    ])
+
+    ok = abs(drift) < 0.02
+
+    summary = {
+        "ok": ok,
+        "daily_hours": daily_total,
+        "enriched_hours": enriched_total,
+        "drift_hours": drift,
+        "monthexact_slice_hours": me_total,
+        "monthexact_range": f"{me_from_s} .. {me_to_s}",
+        "this_month_raw": raw_this_month,
+        "this_month_aggregated": agg_this_month,
+        "this_year_raw": raw_this_year,
+        "this_year_aggregated": agg_this_year,
+    }
+
+    logger.info(
+        f"Consistency check: daily={daily_total:,.2f}h vs enriched={enriched_total:,.2f}h, "
+        f"drift={drift:+.2f}h ({'OK' if ok else 'FAIL'})"
+    )
+    logger.info(
+        f"  MonthEXACT slice ({me_from_s}..{me_to_s}): {me_total:,.2f}h"
+    )
+    logger.info(
+        f"  This month: raw={raw_this_month:,.2f}h vs All={agg_this_month:,.2f}h"
+    )
+    logger.info(
+        f"  This year:  raw={raw_this_year:,.2f}h vs All={agg_this_year:,.2f}h"
+    )
+    if not ok:
+        logger.error(
+            f"CONSISTENCY CHECK FAILED — All aggregation drifted "
+            f"{drift:+.2f}h from raw daily entries. "
+            "MonthEXACT_RAW and All tab will disagree."
+        )
+
+    return summary
+
+
 def run_extracts(
     from_date: date,
     to_date: date,
@@ -505,42 +674,50 @@ def run_extracts(
     mode: str = "all",
     use_sheets: bool = True,
     use_excel: bool = False,
+    all_tab: str = "skip",
 ) -> int:
     """
     Run extracts based on mode.
 
     Modes:
-        all        — Projects + MonthExact (supported extracts)
-        projects   — Active, Archived, and combined Projects_ALL
-        monthexact — Time tracking entries (MonthEXACT_RAW)
-        timesheet  — Month_RAW, Year_RAW (NOT YET SUPPORTED - Hive API issue)
-        yearly     — ALL_2020..ALL_2026 (NOT YET SUPPORTED - Hive API issue)
+        all       — Time + Projects: BillingProject_RAW, BillingProject_RAW_Archive,
+                    Projects_ALL, MonthEXACT_RAW (+ All tab when all_tab != "skip")
+        projects  — Projects only: Active, Archived, Projects_ALL
+
+    all_tab:
+        skip — do not touch the All tab (default; current production behavior)
+        test — write enriched aggregation to All_TEST (safe rollout target)
+        prod — write enriched aggregation to the live All tab
 
     Returns:
-        Exit code (0 for success, non-zero for errors)
+        Result dict (with error_count / success_count / etc.)
     """
     logger = get_logger()
-    logger.info(f"Starting HIVE Extract (mode={mode}): {from_date} to {to_date}")
+    logger.info(
+        f"Starting HIVE Extract (mode={mode}, all_tab={all_tab}): "
+        f"{from_date} to {to_date}"
+    )
     run_start = time.time()
 
-    # Validate mode
-    SUPPORTED_MODES = {"all", "projects", "monthexact"}
-    UNSUPPORTED_MODES = {"timesheet", "yearly"}
-    valid_modes = SUPPORTED_MODES | UNSUPPORTED_MODES
-
-    if mode not in valid_modes:
+    SUPPORTED_MODES = {"all", "projects"}
+    if mode not in SUPPORTED_MODES:
         logger.error(
             f"Unknown mode: {mode!r}. "
-            f"Valid modes: {', '.join(sorted(valid_modes))}"
+            f"Valid modes: {', '.join(sorted(SUPPORTED_MODES))}"
         )
         return 1
 
-    if mode in UNSUPPORTED_MODES:
+    if all_tab not in ("skip", "test", "prod"):
         logger.error(
-            f"Mode {mode!r} is not yet supported — waiting for Hive API fix. "
-            f"Supported modes: {', '.join(sorted(SUPPORTED_MODES))}"
+            f"Unknown all_tab option: {all_tab!r}. Valid: skip, test, prod"
         )
         return 1
+    if all_tab != "skip" and mode != "all":
+        logger.warning(
+            f"--all-tab={all_tab} requires mode=all (time data is needed). "
+            f"Ignoring flag for mode={mode}."
+        )
+        all_tab = "skip"
 
     # Load local settings (API key only)
     settings = load_settings()
@@ -575,7 +752,6 @@ def run_extracts(
     # Initialize Google Sheets service if requested
     sheets: Optional[SheetsService] = None
     spreadsheet_id = client_config.sheets.hive_extract_sheet_id
-    credential_ref = client_config.client.google_auth_override or "BosOpt"
 
     if use_sheets:
         if not spreadsheet_id:
@@ -586,7 +762,23 @@ def run_extracts(
             )
             return 1
         else:
-            sheets = SheetsService(spreadsheet_id, credential_ref=credential_ref)
+            # SA key always lives under clients/BosOpt/. Per-client access is
+            # handled by impersonate_email (DWD) for ELW/BHCP or SA-direct
+            # sharing for SA-approved clients. Clients not yet on the SA
+            # approval list (sa_policy.SA_APPROVED_CLIENTS) fall back to
+            # user OAuth.
+            impersonate_email = getattr(client_config.client, "sa_email_impersonation", "") or None
+            from pathlib import Path as _Path
+            import sys as _sys
+            _shared = str(_Path(__file__).parent.parent.parent / "_shared_config")
+            if _shared not in _sys.path:
+                _sys.path.insert(0, _shared)
+            from integrations.sa_policy import prefer_oauth_for
+            sheets = SheetsService(
+                spreadsheet_id, credential_ref="BosOpt",
+                impersonate_email=impersonate_email,
+                prefer_oauth=prefer_oauth_for(client_config.client.client_key),
+            )
             if sheets.authenticate():
                 if not sheets.test_access():
                     logger.warning("Could not access Google Sheet, continuing without Sheets")
@@ -601,13 +793,12 @@ def run_extracts(
 
     # Track results
     results: Dict[str, dict] = {}
+    consistency: Optional[Dict[str, Any]] = None
 
-    run_projects = mode in ("all", "projects")
-    run_monthexact = mode in ("all", "monthexact")
-
-    # 1. Projects (active, archived, combined)
-    if run_projects:
-        # Fetch active and archived data first (before any writes)
+    # 1. Projects (active, archived, combined) — fetched once, used everywhere
+    active_data: List[Dict[str, Any]] = []
+    archived_data: List[Dict[str, Any]] = []
+    if mode in ("all", "projects"):
         logger.info("Fetching project data from Hive...")
         active_data = hive.get_projects(archived=False)
         archived_data = hive.get_projects(archived=True)
@@ -616,7 +807,6 @@ def run_extracts(
         if sheets:
             pre_write_project_check(sheets, active_data, archived_data)
 
-        # Now process each extract using the prefetched data
         for key, data in [
             ("active_projects", active_data),
             ("archived_projects", archived_data),
@@ -629,11 +819,72 @@ def run_extracts(
             )
             results[config["filename"]] = result
 
-    # 2. MonthEXACT (time tracking entries)
-    if run_monthexact:
-        config = EXTRACTS["time_tracking"]
-        result = process_extract(hive, "time_tracking", config, from_date, to_date, sheets, use_excel)
-        results[config["filename"]] = result
+    # 2. Time data — single fetch, sliced for MonthEXACT_RAW, aggregated for All
+    if mode == "all":
+        # If the All tab will be written, fetch the full history once so both
+        # MonthEXACT_RAW (user's date range slice) and All (aggregated) come
+        # from the same in-memory data. Otherwise keep the legacy tight fetch.
+        if all_tab != "skip":
+            fetch_from = date(2020, 1, 1)
+            fetch_to = date.today()
+            logger.info(
+                f"Fetching time entries with full history {fetch_from}..{fetch_to} "
+                f"(--all-tab={all_tab})"
+            )
+        else:
+            fetch_from = from_date
+            fetch_to = to_date
+
+        all_daily_entries = hive.get_time_entries(fetch_from, fetch_to)
+
+        # MonthEXACT_RAW = user date-range slice (when fetch was wider) or full set
+        if all_tab != "skip":
+            from_str, to_str = from_date.isoformat(), to_date.isoformat()
+            me_entries = [
+                e for e in all_daily_entries
+                if from_str <= (e.get("Time Tracked Date") or "") <= to_str
+            ]
+        else:
+            me_entries = all_daily_entries
+
+        me_config = EXTRACTS["time_tracking"]
+        me_result = process_extract(
+            hive, "time_tracking", me_config, from_date, to_date,
+            sheets, use_excel,
+            prefetched_data=me_entries,
+        )
+        results[me_config["filename"]] = me_result
+
+        # All tab — aggregate full set, then write
+        if all_tab != "skip":
+            target_tab_key = "all_test" if all_tab == "test" else "all"
+            target_tab_name = TABS[target_tab_key]["name"]
+            logger.info(f"Aggregating {len(all_daily_entries)} entries for {target_tab_name}...")
+
+            enriched_rows = hive.get_enriched_monthly_entries(
+                fetch_from, fetch_to, role_lookup=None,
+                daily_entries=all_daily_entries,
+                active_projects=active_data,
+                archived_projects=archived_data,
+            )
+
+            consistency = _consistency_check(
+                all_daily_entries, enriched_rows, from_date, to_date,
+            )
+
+            if sheets is None:
+                logger.warning(
+                    "Sheets unavailable — skipping All tab write but aggregation ran"
+                )
+                results[f"{target_tab_name}_aggregation"] = {
+                    "status": "skipped",
+                    "description": f"All tab → {target_tab_name} (Sheets unavailable)",
+                    "rows": len(enriched_rows),
+                    "time": 0,
+                }
+            else:
+                all_result = _write_all_tab(sheets, enriched_rows, target_tab_key)
+                results[target_tab_name] = all_result
 
     # Log summary
     success_count = sum(1 for r in results.values() if r["status"] == "success")
@@ -675,6 +926,7 @@ def run_extracts(
     checks_value = ""
     checks_ok = False
     checks_location = f"{CHECKS_TAB['name']}!{CHECKS_TAB['cell']}"
+    checks_detail: List[Dict[str, str]] = []
     if sheets:
         time.sleep(30)
         try:
@@ -686,6 +938,47 @@ def run_extracts(
             logger.info("Checks validation: ALL GOOD")
         else:
             logger.warning(f"Checks validation: PROBLEMS DETECTED — {checks_value!r} (see {checks_location})")
+
+        # Read the per-tab check details so the portal status page can show them
+        # without the user having to open the Activity Log or the spreadsheet.
+        detail_range = CHECKS_TAB.get("detail_range", "A4:D20")
+        try:
+            svc = sheets._shared.service
+            ss_id = sheets._shared._default_spreadsheet_id
+            rows_raw = svc.spreadsheets().values().get(
+                spreadsheetId=ss_id,
+                range=f"'{CHECKS_TAB['name']}'!{detail_range}",
+            ).execute().get("values", []) or []
+            # First row is headers; rest are per-tab result rows
+            if rows_raw:
+                headers = [str(c).strip() for c in rows_raw[0]]
+                # Pad headers to 4 cols so zip doesn't drop columns
+                while len(headers) < 4:
+                    headers.append("")
+                for row in rows_raw[1:]:
+                    row = list(row) + [""] * max(0, 4 - len(row))
+                    tab_name = str(row[0]).strip()
+                    if not tab_name:
+                        continue
+                    entry = {
+                        "tab": tab_name,
+                        "updated": str(row[1]).strip(),
+                        "error1": str(row[2]).strip(),
+                        "error2": str(row[3]).strip(),
+                    }
+                    # Flag entries where any error cell is not clean
+                    err1 = entry["error1"].lower()
+                    err2 = entry["error2"].lower()
+                    entry["is_error"] = (
+                        bool(err1) and err1 not in ("all good", "good")
+                        and not err1.startswith("0 ")
+                    ) or (
+                        bool(err2) and err2 not in ("all good", "good")
+                        and not err2.startswith("0 ")
+                    )
+                    checks_detail.append(entry)
+        except Exception as e:
+            logger.warning(f"Could not read Checks detail range: {e}")
 
     # --- Google Chat notification ---
     notification_msg = f"HIVE Extract complete ({total_elapsed:.1f}s)\n"
@@ -725,11 +1018,14 @@ def run_extracts(
         "checks": checks_value if not checks_ok else "ALL GOOD",
         "checks_ok": checks_ok,
         "checks_location": checks_location if not checks_ok else "",
+        "checks_detail": checks_detail,
+        "consistency": consistency,
         "total_rows": total_rows,
         "success_count": success_count,
         "error_count": error_count,
         "elapsed": round(total_elapsed, 1),
         "mode": mode,
+        "all_tab": all_tab,
         "from_date": from_date.isoformat(),
         "to_date": to_date.isoformat(),
     }
@@ -737,6 +1033,19 @@ def run_extracts(
     return result_dict
 
 
+# Shared failure-notification wiring ------------------------------------
+import sys as _sys_notify
+from pathlib import Path as _Path_notify
+
+_sys_notify.path.insert(0, str(_Path_notify(__file__).parent.parent.parent / "_shared_config"))
+try:
+    from integrations.notify import notify_uncaught  # noqa: E402
+except Exception:
+    def notify_uncaught(**_kw):
+        return lambda fn: fn
+
+
+@notify_uncaught(app="HIVE_Extract", tool="hive_extract")
 def main():
     """Main entry point."""
     from datetime import timedelta
@@ -748,14 +1057,12 @@ def main():
         "mode",
         nargs="?",
         default="all",
-        choices=["all", "projects", "monthexact", "timesheet", "yearly"],
+        choices=["all", "projects"],
         help=(
             "What to extract: "
-            "all (Projects + MonthExact), "
-            "projects (Active/Archived/Combined), "
-            "monthexact (time tracking entries), "
-            "timesheet (NOT YET SUPPORTED), "
-            "yearly (NOT YET SUPPORTED). "
+            "all (Time + Projects: BillingProject_RAW, BillingProject_RAW_Archive, "
+            "Projects_ALL, MonthEXACT_RAW, and optionally the All tab via --all-tab), "
+            "projects (Active/Archived/Combined only). "
             "Default: all"
         ),
     )
@@ -795,6 +1102,19 @@ def main():
         action="store_true",
         help="Output structured JSON result to stdout (for portal/scheduler integration)",
     )
+    parser.add_argument(
+        "--all-tab",
+        choices=["skip", "test", "prod"],
+        default="skip",
+        help=(
+            "Control the All tab write (mode=all only): "
+            "skip (default; current behavior, leaves the All tab alone), "
+            "test (write enriched aggregation to All_TEST), "
+            "prod (overwrite the live All tab — replaces the legacy LET formula). "
+            "When test or prod, the time-entry fetch widens to 2020-01-01..today "
+            "so MonthEXACT_RAW and All come from the same data."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -824,9 +1144,10 @@ def main():
         print(f"Error loading master config for client '{client_key}': {e}")
         sys.exit(1)
 
+    impersonate = client_config.client.sa_email_impersonation or ""
     logger.info(
         f"Client: {client_key}, "
-        f"google_auth={client_config.client.google_auth_override or 'BosOpt'}, "
+        f"sa_auth={'DWD as ' + impersonate if impersonate else 'SA-direct'}, "
         f"hive_extract_sheet_id={client_config.sheets.hive_extract_sheet_id}"
     )
 
@@ -848,8 +1169,10 @@ def main():
             sys.exit(1)
 
     mode = args.mode
+    all_tab = getattr(args, "all_tab", "skip")
     print(f"Client: {client_key}")
     print(f"Mode: {mode}")
+    print(f"All-tab: {all_tab}")
     print(f"Date range: {from_date} to {to_date}")
 
     # Run extracts
@@ -858,6 +1181,7 @@ def main():
     result = run_extracts(
         from_date, to_date, client_config,
         mode=mode, use_sheets=use_sheets, use_excel=use_excel,
+        all_tab=all_tab,
     )
 
     # Output JSON for portal/scheduler integration

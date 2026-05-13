@@ -65,6 +65,10 @@ TABS = {
     "month_raw": {"name": "Month_RAW", "header_row": 4, "data_start_row": 5},
     "year_raw": {"name": "Year_RAW", "header_row": 4, "data_start_row": 5},
     "all_projects": {"name": "Projects_ALL", "header_row": 4, "data_start_row": 5},
+    # Enriched monthly aggregation — destination tabs
+    "all": {"name": "All", "header_row": 4, "data_start_row": 5, "last_data_col": "Z"},
+    "month": {"name": "Month", "header_row": 4, "data_start_row": 5, "last_data_col": "Z"},
+    "all_test": {"name": "All_TEST", "header_row": 4, "data_start_row": 5, "last_data_col": "Z"},
 }
 
 # Year tab configurations - headers in row 5, data starts row 6
@@ -108,6 +112,19 @@ COLUMN_ORDER = {
         "Time Tracked Date", "Tracked (Minutes)", "Tracked (HH:mm)",
         "Estimated (Minutes)", "Estimated (HH:mm)", "Description", "Labels",
     ],
+    # All / Month tab canonical order — MUST match Row 4 of the All tab on the
+    # LSC Hive Data Sets spreadsheet. Columns AA (27) and AB (28) are intentional
+    # blank gaps on the sheet; AC/AD are sheet-side CALCULATED formulas.
+    # Do NOT reorder these — downstream formulas reference specific columns.
+    "all_enriched": [
+        "Person", "Email", "Role", "Project", "Client Name", "Project Codes",
+        "LSC Prospect?", "Project Type", "Funder Type", "Amount Requested",
+        "Amount Awarded", "Grant Period Start Date", "Grant Period End Date",
+        "Renew Next Elgible Application Cycle?", "Stage", "Submission Year",
+        "Funder Notification Date", "Note(s)", "Funder Name", "Date Submitted",
+        "Category", "Approver", "Date unit", "Date", "Hours", "Grant Type",
+        "Outline Link",
+    ],
 }
 
 # Columns to always exclude from output (not useful)
@@ -139,4 +156,8 @@ TEST_YEAR_TABS = {
 }
 
 # Checks tab — used to validate data after extracts complete
-CHECKS_TAB = {"name": "Checks", "cell": "A3"}
+CHECKS_TAB = {
+    "name": "Checks",
+    "cell": "A3",              # summary cell — "ALL GOOD" or "N ERROR(S)"
+    "detail_range": "A4:D20",  # per-tab rows (headers at row 4, data rows follow)
+}

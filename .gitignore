@@ -53,3 +53,12 @@ desktop.ini
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Local Claude tooling cache
+.memsearch/
+
+# Local-only data dumps (older outputs are tracked historical reference;
+# these patterns cover ad-hoc dumps generated during debugging)
+output/Export_Timesheet_Reporting_2026-04-*
+output/HIVE Data Sets*.csv
+output/all_enriched_preview.json

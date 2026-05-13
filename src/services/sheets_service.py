@@ -56,11 +56,15 @@ def _to_cell_value(val: Any) -> Any:
 class SheetsService:
     """HIVE_Extract Sheets service — wraps shared integration with Hive-specific features."""
 
-    def __init__(self, spreadsheet_id: str, credential_ref: str = "BosOpt"):
+    def __init__(self, spreadsheet_id: str, credential_ref: str = "BosOpt",
+                 impersonate_email: Optional[str] = None,
+                 prefer_oauth: bool = False):
         self._shared = _SharedSheetsService(
             credential_ref=credential_ref,
             scopes=GOOGLE_SCOPES,
             spreadsheet_id=spreadsheet_id,
+            impersonate_email=impersonate_email,
+            prefer_oauth=prefer_oauth,
         )
 
     def authenticate(self) -> bool:

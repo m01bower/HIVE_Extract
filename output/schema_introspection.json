@@ -224,6 +224,22 @@
               }
             },
             {
+              "name": "completedDateStart",
+              "type": {
+                "name": "Date",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "completedDateEnd",
+              "type": {
+                "name": "Date",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
               "name": "startDate",
               "type": {
                 "name": "Date",
@@ -291,6 +307,22 @@
               "name": "customFieldValue",
               "type": {
                 "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "includeAllProjectsForSystemAdmin",
+              "type": {
+                "name": "Boolean",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "includeArchivedProjects",
+              "type": {
+                "name": "Boolean",
                 "kind": "SCALAR",
                 "ofType": null
               }
@@ -381,8 +413,33 @@
           }
         },
         {
+          "name": "actionLinks",
+          "description": null,
+          "args": [
+            {
+              "name": "actionIds",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": null,
+                  "kind": "LIST"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": null,
+              "kind": "LIST"
+            }
+          }
+        },
+        {
           "name": "getCustomFields",
-          "description": "Returns a paginated list of custom fields for a workspace or project action view.\n\nParameters:\n- workspaceId: Required. The ID of the workspace to get custom fields for.\n- actionViewId: Optional. The ID of the action view to get custom fields for. Could be used to get custom fields for a specific project action view.\n- formId: Optional. The ID of the form to get custom fields for.\n- first: Optional. The number of custom fields to return.\n- last: Optional. The number of custom fields to return.\n- before: Optional. The ID of the custom field to return before.\n- after: Optional. The ID of the custom field to return after.\n- selector: Optional. A JSON object to filter the custom fields.\n- includeRemoved: Optional. Whether to include removed custom fields.\n- searchParams: Optional. A JSON object to search the custom fields.\n- sortField: Optional. The field to sort the custom fields by.\n- sortOrder: Optional. The order to sort the custom fields by.\n- includeProjectCustomFields: Optional. Whether to include project custom fields.",
+          "description": "Returns a paginated list of custom fields for a workspace or project action view.\n\nParameters:\n- workspaceId: Required. The ID of the workspace to get custom fields for.\n- actionViewId: Optional. The ID of the action view to get custom fields for. Could be used to get custom fields for a specific project action view.\n- formId: Optional. The ID of the form to get custom fields for.\n- first: Optional. The number of custom fields to return.\n- last: Optional. The number of custom fields to return.\n- before: Optional. The ID of the custom field to return before.\n- after: Optional. The ID of the custom field to return after.\n- selector: Optional. A JSON object to filter the custom fields.\n- includeRemoved: Optional. Whether to include removed custom fields.\n- searchParams: Optional. A JSON object to search the custom fields.\n- sortField: Optional. The field to sort the custom fields by.\n- sortOrder: Optional. The order to sort the custom fields by.\n- includeProjectCustomFields: Optional. Whether to include project custom fields.\n- actionTypes: Optional. When non-empty: if the list includes `action`, match null/empty actionTypes or overlap; otherwise match overlap only (no null/empty).",
           "args": [
             {
               "name": "workspaceId",
@@ -497,6 +554,17 @@
                 "name": "Boolean",
                 "kind": "SCALAR",
                 "ofType": null
+              }
+            },
+            {
+              "name": "actionTypes",
+              "type": {
+                "name": null,
+                "kind": "LIST",
+                "ofType": {
+                  "name": null,
+                  "kind": "NON_NULL"
+                }
               }
             }
           ],
@@ -799,7 +867,7 @@
         },
         {
           "name": "getProjects",
-          "description": "Get projects that the user has access to with pagination, filtering and sorting\n\nAccess: Requires workspace access\n\nParameters:\n  - workspaceId: The ID of the workspace\n  - first: Number of projects to return (default: pagination limit)\n  - last: Optional number of projects to return from the end\n  - before: Optional cursor for pagination\n  - after: Optional cursor for pagination\n  - searchParams: Optional search parameters\n  - specificIds: Optional array of specific project IDs to include\n  - excludedIds: Optional array of project IDs to exclude\n  - includeTemplates: Optional flag to include template projects\n  - archived: Optional flag to include archived projects (default: false)\n  - templatesOnly: Optional flag to return only template projects (default: false)\n  - includePublic: Optional flag to include public projects (default: true)\n  - includePrivate: Optional flag to include private projects (default: false)\n  - includeReadOnly: Optional flag to include read-only projects\n  - includeArchived: Optional flag to include archived projects (default: false)\n  - rootProjectId: Optional root project ID to filter by\n  - userId: Optional user ID to filter projects by\n\nReturns: ProjectConnection with edges and page info",
+          "description": "Get projects that the user has access to with pagination, filtering and sorting.\n\nWhen searching for projects by custom field be sure to provide the customFieldFilters parameter to filter project results.\n\nWhen searching for projects or actions or other object types, be sure to leverage the filtering capabilities as much as possible to avoid needing to page through results unnecessarily.\n\nAccess: Requires workspace access\n\nParameters:\n  - workspaceId: The ID of the workspace\n  - first: Number of projects to return (default: pagination limit)\n  - last: Optional number of projects to return from the end\n  - before: Optional cursor for pagination\n  - after: Optional cursor for pagination\n  - searchParams: Optional search parameters\n  - specificIds: Optional array of specific project IDs to include\n  - excludedIds: Optional array of project IDs to exclude\n  - includeTemplates: Optional flag to include template projects\n  - archived: Optional flag to include archived projects (default: false)\n  - templatesOnly: Optional flag to return only template projects (default: false)\n  - includePublic: Optional flag to include public projects (default: true)\n  - includePrivate: Optional flag to include private projects (default: false)\n  - includeReadOnly: Optional flag to include read-only projects\n  - includeArchived: Optional flag to include archived projects (default: false)\n  - rootProjectId: Optional root project ID to filter by\n  - userId: Optional user ID for visibility context (whose share/public access rules apply). This does not filter by project owner.\n  - ownerIds: Optional user IDs; when set, only projects that include at least one of these users in ownerIds are returned.\n  - customFieldFilters: Filter projects by custom field values server-side. Each entry matches on a single custom field. Multiple entries are ANDed together.\n\nReturns: ProjectConnection with edges and page info",
           "args": [
             {
               "name": "workspaceId",
@@ -809,6 +877,17 @@
                 "ofType": {
                   "name": "ID",
                   "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "workspaceIds",
+              "type": {
+                "name": null,
+                "kind": "LIST",
+                "ofType": {
+                  "name": null,
+                  "kind": "NON_NULL"
                 }
               }
             },
@@ -945,6 +1024,25 @@
                 "kind": "SCALAR",
                 "ofType": null
               }
+            },
+            {
+              "name": "ownerIds",
+              "type": {
+                "name": null,
+                "kind": "LIST",
+                "ofType": {
+                  "name": null,
+                  "kind": "NON_NULL"
+                }
+              }
+            },
+            {
+              "name": "includeAllProjectsForSystemAdmin",
+              "type": {
+                "name": "Boolean",
+                "kind": "SCALAR",
+                "ofType": null
+              }
             }
           ],
           "type": {
@@ -1016,6 +1114,14 @@
                 "kind": "SCALAR",
                 "ofType": null
               }
+            },
+            {
+              "name": "includeAllProjectsForSystemAdmin",
+              "type": {
+                "name": "Boolean",
+                "kind": "SCALAR",
+                "ofType": null
+              }
             }
           ],
           "type": {
@@ -1045,6 +1151,16 @@
           ],
           "type": {
             "name": "Workspace",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "getUsersWorkspaces",
+          "description": "Get the current user's workspaces, including accepted workspaces and primary workspace with names.\n\nAccess: Requires user authentication.\n\nReturns: The user's accepted workspaces and primary workspace, each with ID and name.",
+          "args": [],
+          "type": {
+            "name": "GetUsersWorkspacesResult",
             "kind": "OBJECT",
             "ofType": null
           }
@@ -1649,162 +1765,6 @@
             "ofType": {
               "name": null,
               "kind": "LIST"
-            }
-          }
-        },
-        {
-          "name": "getTimesheetReportingData",
-          "description": "No usage.\n\nAccess: Requires workspace admin access\n\nErrors: Returns [] if not workspace admin,\nor this feature is disabled",
-          "args": [
-            {
-              "name": "workspaceId",
-              "type": {
-                "name": null,
-                "kind": "NON_NULL",
-                "ofType": {
-                  "name": "ID",
-                  "kind": "SCALAR"
-                }
-              }
-            },
-            {
-              "name": "startDate",
-              "type": {
-                "name": null,
-                "kind": "NON_NULL",
-                "ofType": {
-                  "name": "Date",
-                  "kind": "SCALAR"
-                }
-              }
-            },
-            {
-              "name": "endDate",
-              "type": {
-                "name": null,
-                "kind": "NON_NULL",
-                "ofType": {
-                  "name": "Date",
-                  "kind": "SCALAR"
-                }
-              }
-            }
-          ],
-          "type": {
-            "name": "JSONObject",
-            "kind": "SCALAR",
-            "ofType": null
-          }
-        },
-        {
-          "name": "getTimesheetReportingCsvExportData",
-          "description": "Used for csv export in Reporting in \"Timesheets\" app.\n\nAccess: It requires user access.\n\nErrors: Returns [] if not logged in, or doesn't have access to reporting,\nor this feature is disabled",
-          "args": [
-            {
-              "name": "workspaceId",
-              "type": {
-                "name": null,
-                "kind": "NON_NULL",
-                "ofType": {
-                  "name": "ID",
-                  "kind": "SCALAR"
-                }
-              }
-            },
-            {
-              "name": "startDate",
-              "type": {
-                "name": null,
-                "kind": "NON_NULL",
-                "ofType": {
-                  "name": "Date",
-                  "kind": "SCALAR"
-                }
-              }
-            },
-            {
-              "name": "endDate",
-              "type": {
-                "name": null,
-                "kind": "NON_NULL",
-                "ofType": {
-                  "name": "Date",
-                  "kind": "SCALAR"
-                }
-              }
-            },
-            {
-              "name": "groupBy",
-              "type": {
-                "name": "TimesheetReportingGroupByEnum",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "columns",
-              "type": {
-                "name": null,
-                "kind": "LIST",
-                "ofType": {
-                  "name": null,
-                  "kind": "NON_NULL"
-                }
-              }
-            },
-            {
-              "name": "selectedFilters",
-              "type": {
-                "name": "TimesheetsReportingFiltersInput",
-                "kind": "INPUT_OBJECT",
-                "ofType": null
-              }
-            }
-          ],
-          "type": {
-            "name": "String",
-            "kind": "SCALAR",
-            "ofType": null
-          }
-        },
-        {
-          "name": "getTimeTrackingData",
-          "description": "Used for querying time tracking data\nin \"Time-tracking\" tab in \"Timesheets\" app.\n\nAccess: It requires user access.\n\nErrors: Returns specific expected errors if:\nuser doesn't have access to workspace or not logged then\nreturns { projects: [], actions: [] }",
-          "args": [
-            {
-              "name": "workspaceId",
-              "type": {
-                "name": null,
-                "kind": "NON_NULL",
-                "ofType": {
-                  "name": "ID",
-                  "kind": "SCALAR"
-                }
-              }
-            },
-            {
-              "name": "startDate",
-              "type": {
-                "name": "Date",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "endDate",
-              "type": {
-                "name": "Date",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            }
-          ],
-          "type": {
-            "name": null,
-            "kind": "NON_NULL",
-            "ofType": {
-              "name": "TimeTrackingData",
-              "kind": "OBJECT"
             }
           }
         },
@@ -2744,6 +2704,926 @@
           }
         },
         {
+          "name": "getAccountFilterCounts",
+          "description": null,
+          "args": [
+            {
+              "name": "workspaceId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "searchParams",
+              "type": {
+                "name": "SearchParams",
+                "kind": "INPUT_OBJECT",
+                "ofType": null
+              }
+            },
+            {
+              "name": "ownerIds",
+              "type": {
+                "name": null,
+                "kind": "LIST",
+                "ofType": {
+                  "name": null,
+                  "kind": "NON_NULL"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "AccountFilterCounts",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "getAccounts",
+          "description": null,
+          "args": [
+            {
+              "name": "workspaceId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "first",
+              "type": {
+                "name": "Int",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "last",
+              "type": {
+                "name": "Int",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "before",
+              "type": {
+                "name": "ID",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "after",
+              "type": {
+                "name": "ID",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "searchParams",
+              "type": {
+                "name": "SearchParams",
+                "kind": "INPUT_OBJECT",
+                "ofType": null
+              }
+            },
+            {
+              "name": "ownerIds",
+              "type": {
+                "name": null,
+                "kind": "LIST",
+                "ofType": {
+                  "name": null,
+                  "kind": "NON_NULL"
+                }
+              }
+            },
+            {
+              "name": "sortField",
+              "type": {
+                "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "sortOrder",
+              "type": {
+                "name": "Int",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            }
+          ],
+          "type": {
+            "name": "AccountConnection",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "getCampaign",
+          "description": null,
+          "args": [
+            {
+              "name": "campaignId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": "Campaign",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "getCampaigns",
+          "description": null,
+          "args": [
+            {
+              "name": "workspaceId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "first",
+              "type": {
+                "name": "Int",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "last",
+              "type": {
+                "name": "Int",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "before",
+              "type": {
+                "name": "ID",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "after",
+              "type": {
+                "name": "ID",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "searchParams",
+              "type": {
+                "name": "SearchParams",
+                "kind": "INPUT_OBJECT",
+                "ofType": null
+              }
+            },
+            {
+              "name": "sortField",
+              "type": {
+                "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "sortOrder",
+              "type": {
+                "name": "Int",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            }
+          ],
+          "type": {
+            "name": "CampaignConnection",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "getCampaignRecipients",
+          "description": null,
+          "args": [
+            {
+              "name": "workspaceId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "campaignId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "first",
+              "type": {
+                "name": "Int",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": null,
+              "kind": "LIST"
+            }
+          }
+        },
+        {
+          "name": "getPeople",
+          "description": null,
+          "args": [
+            {
+              "name": "workspaceId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "specificIds",
+              "type": {
+                "name": null,
+                "kind": "LIST",
+                "ofType": {
+                  "name": null,
+                  "kind": "NON_NULL"
+                }
+              }
+            },
+            {
+              "name": "accountIds",
+              "type": {
+                "name": null,
+                "kind": "LIST",
+                "ofType": {
+                  "name": null,
+                  "kind": "NON_NULL"
+                }
+              }
+            },
+            {
+              "name": "ownerIds",
+              "type": {
+                "name": null,
+                "kind": "LIST",
+                "ofType": {
+                  "name": null,
+                  "kind": "NON_NULL"
+                }
+              }
+            },
+            {
+              "name": "text",
+              "type": {
+                "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "first",
+              "type": {
+                "name": "Int",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "last",
+              "type": {
+                "name": "Int",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "before",
+              "type": {
+                "name": "ID",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "after",
+              "type": {
+                "name": "ID",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "sortField",
+              "type": {
+                "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "sortOrder",
+              "type": {
+                "name": "Int",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            }
+          ],
+          "type": {
+            "name": "PersonConnection",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "getOpportunity",
+          "description": null,
+          "args": [
+            {
+              "name": "opportunityId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": "Opportunity",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "getOpportunityStats",
+          "description": null,
+          "args": [
+            {
+              "name": "workspaceId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "searchParams",
+              "type": {
+                "name": "SearchParams",
+                "kind": "INPUT_OBJECT",
+                "ofType": null
+              }
+            },
+            {
+              "name": "accountId",
+              "type": {
+                "name": "ID",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "ownerIds",
+              "type": {
+                "name": null,
+                "kind": "LIST",
+                "ofType": {
+                  "name": null,
+                  "kind": "NON_NULL"
+                }
+              }
+            },
+            {
+              "name": "stageKeys",
+              "type": {
+                "name": null,
+                "kind": "LIST",
+                "ofType": {
+                  "name": null,
+                  "kind": "NON_NULL"
+                }
+              }
+            },
+            {
+              "name": "forecastCategories",
+              "type": {
+                "name": null,
+                "kind": "LIST",
+                "ofType": {
+                  "name": null,
+                  "kind": "NON_NULL"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "OpportunityStats",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "getOpportunities",
+          "description": null,
+          "args": [
+            {
+              "name": "workspaceId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "first",
+              "type": {
+                "name": "Int",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "last",
+              "type": {
+                "name": "Int",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "before",
+              "type": {
+                "name": "ID",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "after",
+              "type": {
+                "name": "ID",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "searchParams",
+              "type": {
+                "name": "SearchParams",
+                "kind": "INPUT_OBJECT",
+                "ofType": null
+              }
+            },
+            {
+              "name": "sortField",
+              "type": {
+                "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "sortOrder",
+              "type": {
+                "name": "Int",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "accountId",
+              "type": {
+                "name": "ID",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "ownerIds",
+              "type": {
+                "name": null,
+                "kind": "LIST",
+                "ofType": {
+                  "name": null,
+                  "kind": "NON_NULL"
+                }
+              }
+            },
+            {
+              "name": "stageKeys",
+              "type": {
+                "name": null,
+                "kind": "LIST",
+                "ofType": {
+                  "name": null,
+                  "kind": "NON_NULL"
+                }
+              }
+            },
+            {
+              "name": "forecastCategories",
+              "type": {
+                "name": null,
+                "kind": "LIST",
+                "ofType": {
+                  "name": null,
+                  "kind": "NON_NULL"
+                }
+              }
+            },
+            {
+              "name": "selector",
+              "type": {
+                "name": "JSONObject",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            }
+          ],
+          "type": {
+            "name": "OpportunityConnection",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "getAccountActivities",
+          "description": null,
+          "args": [
+            {
+              "name": "workspaceId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "accountId",
+              "type": {
+                "name": "ID",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "opportunityId",
+              "type": {
+                "name": "ID",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "first",
+              "type": {
+                "name": "Int",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": null,
+              "kind": "LIST"
+            }
+          }
+        },
+        {
+          "name": "getAccountTouchpoints",
+          "description": null,
+          "args": [
+            {
+              "name": "accountId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "types",
+              "type": {
+                "name": null,
+                "kind": "LIST",
+                "ofType": {
+                  "name": null,
+                  "kind": "NON_NULL"
+                }
+              }
+            },
+            {
+              "name": "first",
+              "type": {
+                "name": "Int",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": null,
+              "kind": "LIST"
+            }
+          }
+        },
+        {
+          "name": "getOpportunityTouchpoints",
+          "description": null,
+          "args": [
+            {
+              "name": "opportunityId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "types",
+              "type": {
+                "name": null,
+                "kind": "LIST",
+                "ofType": {
+                  "name": null,
+                  "kind": "NON_NULL"
+                }
+              }
+            },
+            {
+              "name": "first",
+              "type": {
+                "name": "Int",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": null,
+              "kind": "LIST"
+            }
+          }
+        },
+        {
+          "name": "getForecastSnapshots",
+          "description": null,
+          "args": [
+            {
+              "name": "workspaceId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "opportunityId",
+              "type": {
+                "name": "ID",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "period",
+              "type": {
+                "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": null,
+              "kind": "LIST"
+            }
+          }
+        },
+        {
+          "name": "getForecastSummary",
+          "description": null,
+          "args": [
+            {
+              "name": "workspaceId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "period",
+              "type": {
+                "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "JSONObject",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "getCrmAssociations",
+          "description": null,
+          "args": [
+            {
+              "name": "workspaceId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "fromObjectType",
+              "type": {
+                "name": "CRMAssociationObjectType",
+                "kind": "ENUM",
+                "ofType": null
+              }
+            },
+            {
+              "name": "fromObjectId",
+              "type": {
+                "name": "ID",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "fromObjectIds",
+              "type": {
+                "name": null,
+                "kind": "LIST",
+                "ofType": {
+                  "name": null,
+                  "kind": "NON_NULL"
+                }
+              }
+            },
+            {
+              "name": "toObjectType",
+              "type": {
+                "name": "CRMAssociationObjectType",
+                "kind": "ENUM",
+                "ofType": null
+              }
+            },
+            {
+              "name": "toObjectId",
+              "type": {
+                "name": "ID",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "toObjectIds",
+              "type": {
+                "name": null,
+                "kind": "LIST",
+                "ofType": {
+                  "name": null,
+                  "kind": "NON_NULL"
+                }
+              }
+            },
+            {
+              "name": "associationTypes",
+              "type": {
+                "name": null,
+                "kind": "LIST",
+                "ofType": {
+                  "name": null,
+                  "kind": "NON_NULL"
+                }
+              }
+            },
+            {
+              "name": "first",
+              "type": {
+                "name": "Int",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": null,
+              "kind": "LIST"
+            }
+          }
+        },
+        {
           "name": "getEmails",
           "description": "Get emails from the user's mailbox with support for pagination.\nIf there are more emails available beyond the current page,\nthe response will include a \"nextPageToken\". To retrieve the\nnext batch of results, call \"getEmails\" again using the same filters\nand pass the returned \"nextPageToken\".",
           "args": [
@@ -3060,6 +3940,137 @@
           }
         },
         {
+          "name": "getMeetingUserDataByDeal",
+          "description": "Get meeting user data linked to a Hive CRM Opportunity.\nResolves the opportunity's meetingExternalIds and returns matching MeetingUserData docs.",
+          "args": [
+            {
+              "name": "workspaceId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "opportunityId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "String",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "limit",
+              "type": {
+                "name": "Int",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": null,
+              "kind": "LIST"
+            }
+          }
+        },
+        {
+          "name": "notificationsEasySearch",
+          "description": "Atlas search over the current user's notifications in a workspace.\n\nAccess: Requires a logged-in user with workspace access. Results are always\nscoped to notifications whose userIds include the requester.\n\nThe archived flag filters by whether the current user has archived each\nnotification (archivedBy), not by soft-delete state.",
+          "args": [
+            {
+              "name": "text",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "String",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "workspaceId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "projects",
+              "type": {
+                "name": null,
+                "kind": "LIST",
+                "ofType": {
+                  "name": null,
+                  "kind": "NON_NULL"
+                }
+              }
+            },
+            {
+              "name": "archived",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "Boolean",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "limit",
+              "type": {
+                "name": "Int",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "skip",
+              "type": {
+                "name": "Int",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "includeNoProject",
+              "type": {
+                "name": "Boolean",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "includeTotalCount",
+              "type": {
+                "name": "Boolean",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            }
+          ],
+          "type": {
+            "name": "NotificationConnection",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
           "name": "getDashboards",
           "description": "Retrieves a paginated list of dashboards with filtering and sorting",
           "args": [
@@ -3156,12 +4167,110 @@
                 "kind": "ENUM",
                 "ofType": null
               }
+            },
+            {
+              "name": "archived",
+              "type": {
+                "name": "Boolean",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "folderId",
+              "type": {
+                "name": "ID",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "includeProjectId",
+              "type": {
+                "name": "Boolean",
+                "kind": "SCALAR",
+                "ofType": null
+              }
             }
           ],
           "type": {
             "name": "DashboardConnection",
             "kind": "OBJECT",
             "ofType": null
+          }
+        },
+        {
+          "name": "getBuzzWidgetActivitySummary",
+          "description": "Fetches activity data for the Buzz AI Widget.\nReturns notifications for AI analysis and action-status metrics.",
+          "args": [
+            {
+              "name": "widgetId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "workspaceId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "projectIds",
+              "type": {
+                "name": null,
+                "kind": "LIST",
+                "ofType": {
+                  "name": null,
+                  "kind": "NON_NULL"
+                }
+              }
+            },
+            {
+              "name": "activityTypes",
+              "type": {
+                "name": null,
+                "kind": "LIST",
+                "ofType": {
+                  "name": null,
+                  "kind": "NON_NULL"
+                }
+              }
+            },
+            {
+              "name": "filters",
+              "type": {
+                "name": "JSONObject",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "includeAllProjectsForSystemAdmin",
+              "type": {
+                "name": "Boolean",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "BuzzWidgetActivitySummaryResponse",
+              "kind": "OBJECT"
+            }
           }
         },
         {
@@ -3386,6 +4495,67 @@
           }
         },
         {
+          "name": "getAccessibleMcpServers",
+          "description": "Get all MCP servers accessible to the current user in a workspace.\nReturns servers created by the user plus servers shared with them.\nOptionally filter by specific server IDs.\nAlways call this before createMcpServer to check if a server already exists for the same service.",
+          "args": [
+            {
+              "name": "workspaceId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "specificIds",
+              "type": {
+                "name": null,
+                "kind": "LIST",
+                "ofType": {
+                  "name": null,
+                  "kind": "NON_NULL"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": null,
+              "kind": "LIST"
+            }
+          }
+        },
+        {
+          "name": "getAccessibleHttpConnections",
+          "description": "Get all HTTP connections the current user can access in a workspace.\nIncludes: own connections, shared with user, and workspace-wide (sharingType='everyone').\nAlways call this before createHttpConnection to check if a connection already exists for the same API.",
+          "args": [
+            {
+              "name": "workspaceId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": null,
+              "kind": "LIST"
+            }
+          }
+        },
+        {
           "name": "getBuzzCommands",
           "description": "Get slash commands for a workspace.\nCan filter by specific IDs or search by name prefix.",
           "args": [
@@ -3473,6 +4643,87 @@
             "kind": "NON_NULL",
             "ofType": {
               "name": "BuzzCommandConnection",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "webhooks",
+          "description": "Get webhooks for a workspace with pagination, search, and sort. Admin-only.",
+          "args": [
+            {
+              "name": "workspaceId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "searchParams",
+              "type": {
+                "name": "SearchParams",
+                "kind": "INPUT_OBJECT",
+                "ofType": null
+              }
+            },
+            {
+              "name": "first",
+              "type": {
+                "name": "Int",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "last",
+              "type": {
+                "name": "Int",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "before",
+              "type": {
+                "name": "ID",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "after",
+              "type": {
+                "name": "ID",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "sortField",
+              "type": {
+                "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "sortOrder",
+              "type": {
+                "name": "Int",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "WebhookConnection",
               "kind": "OBJECT"
             }
           }
@@ -3788,7 +5039,7 @@
         },
         {
           "name": "bulkUpdateActionDescription",
-          "description": "Update descriptions for multiple actions at once\n\nAccess: Requires user access to all actions\n\nParameters:\n  - actionIds: Array of action IDs to update\n  - workspaceId: The ID of the workspace\n  - description: The new description to set. Must be a valid HTML string. Use the corresponding markdown (<ul> for lists, <code> for code blocks, etc). Code blocks should be contained in a single tag.\n\nReturns: Boolean indicating success",
+          "description": "Update descriptions for multiple actions at once\n\nAccess: Requires user access to all actions\n\nParameters:\n  - actionIds: Array of action IDs to update\n  - workspaceId: The ID of the workspace\n  - description: The new description to set in HTML format. Must be a valid HTML string. Use the corresponding markdown (<ul> for lists, <code> for code blocks, etc). Code blocks should be contained in a single tag. Ignored if 'markdownDescription' is also provided.\n  - markdownDescription: The new description to set in Markdown format. Converted to HTML before storage. Use this instead of 'description' when the content is authored in Markdown.\n\nReturns: Boolean indicating success",
           "args": [
             {
               "name": "actionIds",
@@ -3815,12 +5066,17 @@
             {
               "name": "description",
               "type": {
-                "name": null,
-                "kind": "NON_NULL",
-                "ofType": {
-                  "name": "String",
-                  "kind": "SCALAR"
-                }
+                "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "markdownDescription",
+              "type": {
+                "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
               }
             },
             {
@@ -4046,6 +5302,58 @@
           }
         },
         {
+          "name": "bulkUpdateActionDates",
+          "description": "Update dates for multiple actions at once\n\nAccess: Requires user access to all actions\n\nParameters:\n- actionIds: Array of action IDs to update\n- workspaceId: The ID of the workspace\n- deadline: The new deadline to set (optional)\n- scheduledDate: The new scheduled date to set (optional)",
+          "args": [
+            {
+              "name": "actionIds",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": null,
+                  "kind": "LIST"
+                }
+              }
+            },
+            {
+              "name": "workspaceId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "deadline",
+              "type": {
+                "name": "Date",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "scheduledDate",
+              "type": {
+                "name": "Date",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": null,
+              "kind": "LIST"
+            }
+          }
+        },
+        {
           "name": "updateActionGithubBranchNames",
           "description": "Update the GitHub branch names associated with an action\n\nAccess: Requires user access to the action\n\nParameters:\n  - actionId: The ID of the action to update\n  - githubBranchNames: An array of branch names in the format \"Repo:branch-name\"\n\nReturns: The updated action",
           "args": [
@@ -4075,6 +5383,72 @@
           "type": {
             "name": "Action",
             "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "appendHighwayGateResult",
+          "description": "Append a highway gate result to an action's highway log.\nUsed by Highway autonomous pipeline agents after each gate completes.\n\nAccess: Requires user access to the action.\nErrors: Throws if user is not logged in or lacks action access.",
+          "args": [
+            {
+              "name": "actionId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": "Action",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "sendHighwayFollowupCommand",
+          "description": "Send a follow-up command to a Highway Cloud Agent run associated with an action.\nValidates the agentRunId belongs to the action's highway data before proxying.\n\nAccess: Requires user access to the action.\nErrors: Throws if agentRunId is not found in the action's highway log.",
+          "args": [
+            {
+              "name": "actionId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "agentRunId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "String",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "command",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "String",
+                  "kind": "SCALAR"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": "Boolean",
+            "kind": "SCALAR",
             "ofType": null
           }
         },
@@ -4136,6 +5510,14 @@
             },
             {
               "name": "description",
+              "type": {
+                "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "markdownDescription",
               "type": {
                 "name": "String",
                 "kind": "SCALAR",
@@ -4868,7 +6250,7 @@
         },
         {
           "name": "bulkUpdateActionCustomFields",
-          "description": "Updates a custom field value for multiple actions at once.\n\nThis mutation allows you to set or clear the value of a custom field across multiple actions.\nYou must first call getCustomFields to retrieve available custom fields and their types for the workspace.\n\n**Important**: Use only ONE value parameter based on the custom field type:\n\n| Custom Field Type | Parameter to Use | Value Format |\n|-------------------|------------------|--------------|\n| text              | value            | Any string value |\n| number            | numberValue      | Any numeric value (float) |\n| date              | dateValue        | ISO 8601 date string (e.g., \"2024-01-15T00:00:00.000Z\") |\n| select            | selectedValues   | Array of dropdown option strings (e.g., [\"Option 1\", \"Option 2\"]) |\n| user              | selectedValues   | Array of user IDs (e.g., [\"userId123\", \"userId456\"]) |\n| project           | selectedValues   | Array of project IDs (e.g., [\"projectId123\"]) |\n\n**To clear a custom field value**: Pass null or an empty value for the corresponding parameter.\n\nAccess: Requires user access to all specified actions\n\nReturns: Array of updated Action objects with the new custom field values\n\nErrors:\n  - Throws error if user doesn't have access to any of the actions\n  - Throws error if custom field doesn't exist\n  - Throws error if value type doesn't match the custom field type",
+          "description": "Updates a custom field value for multiple actions at once.\n\nThis mutation allows you to set or clear the value of a custom field across multiple actions.\nYou must first call getCustomFields to retrieve available custom fields and their types for the workspace.\n\n**Important**: Use only ONE value parameter based on the custom field type:\n\n| Custom Field Type | Parameter to Use | Value Format |\n|-------------------|------------------|--------------|\n| text              | value            | Any string value |\n| number            | numberValue      | Any numeric value (float) |\n| date              | dateValue        | ISO 8601 string; time is preserved (e.g., \"2024-01-15T14:30:00.000Z\" or midnight-only) |\n| select            | selectedValues   | Array of dropdown option strings (e.g., [\"Option 1\", \"Option 2\"]) |\n| user              | selectedValues   | Array of user IDs (e.g., [\"userId123\", \"userId456\"]) |\n| project           | selectedValues   | Array of project IDs (e.g., [\"projectId123\"]) |\n\n**To clear a custom field value**: Pass null or an empty value for the corresponding parameter.\n\nAccess: Requires user access to all specified actions\n\nReturns: Array of updated Action objects with the new custom field values\n\nErrors:\n  - Throws error if user doesn't have access to any of the actions\n  - Throws error if custom field doesn't exist\n  - Throws error if value type doesn't match the custom field type",
           "args": [
             {
               "name": "actionIds",
@@ -4982,6 +6364,83 @@
           }
         },
         {
+          "name": "updateActionExternalAccess",
+          "description": null,
+          "args": [
+            {
+              "name": "actionId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "restrictExternalAccess",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "Boolean",
+                  "kind": "SCALAR"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": "Action",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "bulkUpdateActionsExternalAccess",
+          "description": "Bulk update restrictExternalAccess for actions (and their subactions)",
+          "args": [
+            {
+              "name": "actionIds",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": null,
+                  "kind": "LIST"
+                }
+              }
+            },
+            {
+              "name": "workspaceId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "restrictExternalAccess",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "Boolean",
+                  "kind": "SCALAR"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": "Boolean",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
           "name": "bulkArchiveActions",
           "description": null,
           "args": [
@@ -5014,6 +6473,36 @@
             "ofType": {
               "name": null,
               "kind": "LIST"
+            }
+          }
+        },
+        {
+          "name": "removeActionLink",
+          "description": null,
+          "args": [
+            {
+              "name": "source",
+              "type": {
+                "name": "ID",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "target",
+              "type": {
+                "name": "ID",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
             }
           }
         },
@@ -5224,7 +6713,7 @@
         },
         {
           "name": "bulkUpsertCustomFields",
-          "description": "Creates or updates multiple custom fields at once.\n  \nIt can be used to upsert custom fields for a project or an action.\n\nParameters:\n- workspaceId: Required. The ID of the workspace to upsert custom fields for.\n- customFields: Required. An array of custom fields to upsert.\n\nExamples:\n1. Create a custom field (text type) for a project:\n\n{\n\"workspaceId\": \"TCB9NnnbcC4BEc2rF\",\n\"customFields\": [\n    {\n        \"allowMultiSelect\": false,\n        \"_id\": \"d6JfiYb34mMb5zNqL\",\n        \"label\": \"Test Project Field\",\n        \"dropdownValues\": [],\n        \"formula\": null,\n        \"type\": \"text\",\n        \"itemType\": \"project\",\n        \"onlyAdminEditable\": false,\n        \"jiraCustomFieldId\": \"\",\n        \"groupIds\": []\n    }\n  ]\n}\n\n2. Create a custom field (number type) for an action:\n\n{\n\"workspaceId\": \"TCB9NnnbcC4BEc2rF\",\n\"customFields\": [\n    {\n        \"allowMultiSelect\": false,\n        \"_id\": \"y7RCztztQ4D36GKk5\",\n        \"label\": \"asasas\",\n        \"dropdownValues\": [],\n        \"formula\": \"Test Action Field\",\n        \"type\": \"number\",\n        \"itemType\": \"action\",\n        \"onlyAdminEditable\": false,\n        \"jiraCustomFieldId\": \"\",\n        \"groupIds\": []\n    }\n  ]\n}\n\nWhen creating custom fields the _id field is generated server-side automatically, so you don't need to provide it.\nWhen updating custom fields you must provide old _id and new field data (old field data with new values).",
+          "description": "Creates or updates multiple custom fields at once.\n\nIt can be used to upsert custom fields for a project or an action.\n\nParameters:\n- workspaceId: Required. The ID of the workspace to upsert custom fields for.\n- customFields: Required. An array of custom fields to upsert.\n\nExamples:\n1. Create a custom field (text type) for a project:\n\n{\n\"workspaceId\": \"TCB9NnnbcC4BEc2rF\",\n\"customFields\": [\n    {\n        \"allowMultiSelect\": false,\n        \"_id\": \"d6JfiYb34mMb5zNqL\",\n        \"label\": \"Test Project Field\",\n        \"dropdownValues\": [],\n        \"formula\": null,\n        \"type\": \"text\",\n        \"itemType\": \"project\",\n        \"onlyAdminEditable\": false,\n        \"jiraCustomFieldId\": \"\",\n        \"groupIds\": []\n    }\n  ]\n}\n\n2. Create a custom field (number type) for an action:\n\n{\n\"workspaceId\": \"TCB9NnnbcC4BEc2rF\",\n\"customFields\": [\n    {\n        \"allowMultiSelect\": false,\n        \"_id\": \"y7RCztztQ4D36GKk5\",\n        \"label\": \"asasas\",\n        \"dropdownValues\": [],\n        \"formula\": \"Test Action Field\",\n        \"type\": \"number\",\n        \"itemType\": \"action\",\n        \"onlyAdminEditable\": false,\n        \"jiraCustomFieldId\": \"\",\n        \"groupIds\": []\n    }\n  ]\n}\n\nWhen creating custom fields the _id field is generated server-side automatically, so you don't need to provide it.\nWhen updating custom fields you must provide old _id and new field data (old field data with new values).",
           "args": [
             {
               "name": "workspaceId",
@@ -5453,6 +6942,30 @@
                   "kind": "NON_NULL"
                 }
               }
+            },
+            {
+              "name": "senderFirstName",
+              "type": {
+                "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "senderPicture",
+              "type": {
+                "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "onBehalfOfUserId",
+              "type": {
+                "name": "ID",
+                "kind": "SCALAR",
+                "ofType": null
+              }
             }
           ],
           "type": {
@@ -5465,8 +6978,191 @@
           }
         },
         {
+          "name": "deleteMessage",
+          "description": "Deletes a message by ID (soft-delete). Only the message creator can delete it \u2014 attempting to delete another user's message returns an access-denied error.",
+          "args": [
+            {
+              "name": "messageId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "String",
+                  "kind": "SCALAR"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": "Int",
+            "kind": "SCALAR",
+            "ofType": null
+          }
+        },
+        {
+          "name": "updateUserProfile",
+          "description": "Update a workspace user's profile, including financial rates used in Resourcing.\n\nUse this to set or change a user's bill rate, cost rate, or other profile fields\nwithin a specific workspace.\n\nIMPORTANT:\n- Editing another user's profile requires workspace admin permissions.\n- Only use billRateFloat and costRateFloat (not the deprecated integer fields).\n- The userId parameter is required \u2014 always specify the target user.\n\nCommon use cases:\n\u2022 Setting bill and cost rates for users in Resourcing workflows\n\u2022 Updating user names, contact info, or work dates\n\u2022 Configuring utilization targets for resource planning\n\u2022 Assigning managers to a user\n\nParameters:\n\u2022 workspaceId: Required. The workspace containing the user\n\u2022 userId: Required. The ID of the user to update\n\u2022 billRateFloat: Optional. Hourly billing rate as a decimal (e.g. 150.00)\n\u2022 costRateFloat: Optional. Hourly cost rate as a decimal (e.g. 75.50)\n\u2022 firstName: Optional. User's first name\n\u2022 lastName: Optional. User's last name\n\u2022 email: Optional. User's email address\n\u2022 utilizationTarget: Optional. Target utilization percentage (0-100)\n\u2022 managers: Optional. Array of manager user IDs\n\u2022 firstDayOfWork: Optional. User's start date\n\u2022 lastDayOfWork: Optional. User's end date\n\nReturns: The updated User object",
+          "args": [
+            {
+              "name": "workspaceId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "userId",
+              "type": {
+                "name": "ID",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "firstName",
+              "type": {
+                "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "lastName",
+              "type": {
+                "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "email",
+              "type": {
+                "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "photo",
+              "type": {
+                "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "phone",
+              "type": {
+                "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "managers",
+              "type": {
+                "name": null,
+                "kind": "LIST",
+                "ofType": {
+                  "name": null,
+                  "kind": "NON_NULL"
+                }
+              }
+            },
+            {
+              "name": "firstDayOfWork",
+              "type": {
+                "name": "Date",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "lastDayOfWork",
+              "type": {
+                "name": "Date",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "utilizationTarget",
+              "type": {
+                "name": "Int",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "billRate",
+              "type": {
+                "name": "Int",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "billRateFloat",
+              "type": {
+                "name": "Float",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "costRate",
+              "type": {
+                "name": "Int",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "costRateFloat",
+              "type": {
+                "name": "Float",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "dateFormat",
+              "type": {
+                "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "startOfWeek",
+              "type": {
+                "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "githubUsername",
+              "type": {
+                "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            }
+          ],
+          "type": {
+            "name": "User",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
           "name": "addProjectOwner",
-          "description": "Add a user to the project owner list.",
+          "description": "Add a user to the project owner list. This is additive \u2014 existing owners are kept. To replace owners, always call addProjectOwner for the new owner(s) first, then removeProjectOwner for each previous owner \u2014 this ensures the project never has zero owners at any point.",
           "args": [
             {
               "name": "projectId",
@@ -5510,7 +7206,7 @@
         },
         {
           "name": "removeProjectOwner",
-          "description": "Remove a user from the project owner list.",
+          "description": "Remove a user from the project owner list. A project must always have at least one owner \u2014 this will fail if the user is the only remaining owner. When replacing owners, always add the new owner first via addProjectOwner before calling this.",
           "args": [
             {
               "name": "projectId",
@@ -5536,6 +7232,226 @@
             },
             {
               "name": "workspaceId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": "Project",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "addProjectBudget",
+          "description": null,
+          "args": [
+            {
+              "name": "projectId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "budgetId",
+              "type": {
+                "name": "ID",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "name",
+              "type": {
+                "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "type",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ProjectBudgetTypesEnum",
+                  "kind": "ENUM"
+                }
+              }
+            },
+            {
+              "name": "amount",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "Float",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "recurrence",
+              "type": {
+                "name": "RecurrenceDefinitionInput",
+                "kind": "INPUT_OBJECT",
+                "ofType": null
+              }
+            },
+            {
+              "name": "date",
+              "type": {
+                "name": "Date",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "description",
+              "type": {
+                "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "categoryId",
+              "type": {
+                "name": "ID",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            }
+          ],
+          "type": {
+            "name": "Project",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "editProjectBudget",
+          "description": null,
+          "args": [
+            {
+              "name": "projectId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "budgetId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "name",
+              "type": {
+                "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "type",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ProjectBudgetTypesEnum",
+                  "kind": "ENUM"
+                }
+              }
+            },
+            {
+              "name": "amount",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "Float",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "recurrence",
+              "type": {
+                "name": "RecurrenceDefinitionInput",
+                "kind": "INPUT_OBJECT",
+                "ofType": null
+              }
+            },
+            {
+              "name": "date",
+              "type": {
+                "name": "Date",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "description",
+              "type": {
+                "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "categoryId",
+              "type": {
+                "name": "ID",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            }
+          ],
+          "type": {
+            "name": "Project",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "removeProjectBudget",
+          "description": null,
+          "args": [
+            {
+              "name": "projectId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "budgetId",
               "type": {
                 "name": null,
                 "kind": "NON_NULL",
@@ -5657,6 +7573,83 @@
             "name": "Project",
             "kind": "OBJECT",
             "ofType": null
+          }
+        },
+        {
+          "name": "updateMembersPermissionsV2Batch",
+          "description": "Batch update members permissions for multiple projects. Processes each project sequentially\nand continues even if individual updates fail (errors are logged).\n\nAccess: Requires access to each project\n\nReturns: Array of successfully updated projects",
+          "args": [
+            {
+              "name": "projectIds",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": null,
+                  "kind": "LIST"
+                }
+              }
+            },
+            {
+              "name": "memberIds",
+              "type": {
+                "name": null,
+                "kind": "LIST",
+                "ofType": {
+                  "name": null,
+                  "kind": "NON_NULL"
+                }
+              }
+            },
+            {
+              "name": "teamIds",
+              "type": {
+                "name": null,
+                "kind": "LIST",
+                "ofType": {
+                  "name": null,
+                  "kind": "NON_NULL"
+                }
+              }
+            },
+            {
+              "name": "permission",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "String",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "sharingType",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "String",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "isAutomated",
+              "type": {
+                "name": "Boolean",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": null,
+              "kind": "LIST"
+            }
           }
         },
         {
@@ -5875,6 +7868,111 @@
               "name": null,
               "kind": "LIST"
             }
+          }
+        },
+        {
+          "name": "updateProjectOtherCosts",
+          "description": null,
+          "args": [
+            {
+              "name": "projectId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "operation",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "DataOperation",
+                  "kind": "ENUM"
+                }
+              }
+            },
+            {
+              "name": "costId",
+              "type": {
+                "name": "ID",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "name",
+              "type": {
+                "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "color",
+              "type": {
+                "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "amount",
+              "type": {
+                "name": "Float",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "type",
+              "type": {
+                "name": "ProjectOtherCostTypesEnum",
+                "kind": "ENUM",
+                "ofType": null
+              }
+            },
+            {
+              "name": "date",
+              "type": {
+                "name": "Date",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "recurrence",
+              "type": {
+                "name": "RecurrenceDefinitionInput",
+                "kind": "INPUT_OBJECT",
+                "ofType": null
+              }
+            },
+            {
+              "name": "description",
+              "type": {
+                "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "categoryId",
+              "type": {
+                "name": "ID",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            }
+          ],
+          "type": {
+            "name": "Project",
+            "kind": "OBJECT",
+            "ofType": null
           }
         },
         {
@@ -6179,6 +8277,14 @@
             },
             {
               "name": "showRootActionCustomFields",
+              "type": {
+                "name": "Boolean",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "showProjCustomFieldsOnActions",
               "type": {
                 "name": "Boolean",
                 "kind": "SCALAR",
@@ -6537,6 +8643,14 @@
                 "kind": "SCALAR",
                 "ofType": null
               }
+            },
+            {
+              "name": "newName",
+              "type": {
+                "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
+              }
             }
           ],
           "type": {
@@ -6685,7 +8799,7 @@
         },
         {
           "name": "createReminder",
-          "description": "Create a new reminder\n\nExamples:\n\nCreate a one time reminder for 5 minutes from now\nNow: 2025-09-17T20:22:00.000Z\n{\n  \"text\": \"Remind me to check in on Beta Deploy\",\n  \"userIds\": [\"some_user_id\"],\n  \"recurrenceDefinition\": {\n    \"type\":\"daily\",\n    \"interval\":1,\n    \"days\":[\"Wed\",\"Thu\",\"Fri\",\"Sat\",\"Sun\",\"Mon\",\"Tue\"],\n    \"startDate\":\"2025-09-17T20:27:00.000Z\",\n    \"endingType\":\"after\",\n    \"endingAfter\":1\n  },\n  \"workspaceId\": \"7driFnaZjDQZndHqs\",\n  originType: \"buzzThread\",\n  originId: \"some_buzz_thread_id\"\n}\n\nCreate a recurring reminder for every 2 days with no end\nNow: 2025-09-17T20:22:00.000Z\n{\n  \"text\": \"Remind me to check in on Beta Deploy\",\n  \"userIds\": [\"some_user_id\"],\n  \"recurrenceDefinition\": {\n    \"type\":\"daily\",\n    \"interval\":2,\n    \"days\":[\"Wed\",\"Thu\",\"Fri\",\"Sat\",\"Sun\",\"Mon\",\"Tue\"],\n    \"startDate\":\"2025-09-17T20:27:00.000Z\",\n    \"endingType\":\"never\",\n  },\n  \"workspaceId\": \"7driFnaZjDQZndHqs\",\n  originType: \"buzzThread\",\n  originId: \"some_buzz_thread_id\"\n}",
+          "description": "Create a new reminder\n\nExamples:\n\nCreate a one time reminder for 5 minutes from now\nNow: 2025-09-17T20:22:00.000Z\n{\n  \"text\": \"Remind me to check in on Beta Deploy\",\n  \"userIds\": [\"some_user_id\"],\n  \"recurrenceDefinition\": {\n    \"type\":\"daily\",\n    \"interval\":1,\n    \"days\":[\"Wed\",\"Thu\",\"Fri\",\"Sat\",\"Sun\",\"Mon\",\"Tue\"],\n    \"startDate\":\"2025-09-17T20:27:00.000Z\",\n    \"endingType\":\"after\",\n    \"endingAfter\":1\n  },\n  \"workspaceId\": \"<workspaceId>\",\n  originType: \"buzzThread\",\n  originId: \"some_buzz_thread_id\"\n}\n\nCreate a recurring reminder for every 2 days with no end\nNow: 2025-09-17T20:22:00.000Z\n{\n  \"text\": \"Remind me to check in on Beta Deploy\",\n  \"userIds\": [\"some_user_id\"],\n  \"recurrenceDefinition\": {\n    \"type\":\"daily\",\n    \"interval\":2,\n    \"days\":[\"Wed\",\"Thu\",\"Fri\",\"Sat\",\"Sun\",\"Mon\",\"Tue\"],\n    \"startDate\":\"2025-09-17T20:27:00.000Z\",\n    \"endingType\":\"never\",\n  },\n  \"workspaceId\": \"<workspaceId>\",\n  originType: \"buzzThread\",\n  originId: \"some_buzz_thread_id\"\n}",
           "args": [
             {
               "name": "text",
@@ -6760,6 +8874,31 @@
             "ofType": {
               "name": "Reminder",
               "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "deleteReminder",
+          "description": "Soft-delete a reminder so it no longer fires (sets deleted: true). Pass reminderId from getReminders or getReminder.\n\nFor vague requests (\"cancel that reminder\", \"kill the daily one\"): call getReminders first. If several reminders could match,\nlist the candidates in chat and ask the user which reminderId to delete before calling this mutation. Confirm success after deletion.",
+          "args": [
+            {
+              "name": "reminderId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
             }
           }
         },
@@ -7144,7 +9283,7 @@
         },
         {
           "name": "createTimeEntries",
-          "description": null,
+          "description": "Create or update time entries in bulk.\n\nTimesheets are automatically created per ISO week for each unique\n(user, container, category) combination. If a timesheet already exists for\nthat week it is reused and its status is updated to the requested value.\n\nEntries are upserted: calling this mutation again with the same\nuser / container / category / date updates the existing entry instead of\ncreating a duplicate.\n\nAuthentication: Supports both JWT and API-key (api_key or api-key header).\n\nAccess: The caller must have access to the target workspace.",
           "args": [
             {
               "name": "workspaceId",
@@ -7428,6 +9567,22 @@
             },
             {
               "name": "timezone",
+              "type": {
+                "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "timeCategoryId",
+              "type": {
+                "name": "ID",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "description",
               "type": {
                 "name": "String",
                 "kind": "SCALAR",
@@ -7837,6 +9992,14 @@
               }
             },
             {
+              "name": "projectIsDraftMode",
+              "type": {
+                "name": "Boolean",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
               "name": "assignees",
               "type": {
                 "name": null,
@@ -8238,6 +10401,626 @@
           }
         },
         {
+          "name": "createAccount",
+          "description": null,
+          "args": [
+            {
+              "name": "workspaceId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "input",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "AccountInput",
+                  "kind": "INPUT_OBJECT"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Account",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "updateAccount",
+          "description": null,
+          "args": [
+            {
+              "name": "accountId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "input",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "AccountUpdateInput",
+                  "kind": "INPUT_OBJECT"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Account",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "createCampaign",
+          "description": null,
+          "args": [
+            {
+              "name": "workspaceId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "input",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "CampaignInput",
+                  "kind": "INPUT_OBJECT"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Campaign",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "updateCampaign",
+          "description": null,
+          "args": [
+            {
+              "name": "campaignId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "input",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "UpdateCampaignInput",
+                  "kind": "INPUT_OBJECT"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Campaign",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "executeCampaign",
+          "description": null,
+          "args": [
+            {
+              "name": "campaignId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Campaign",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "upsertCampaignRecipient",
+          "description": null,
+          "args": [
+            {
+              "name": "input",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "CampaignRecipientInput",
+                  "kind": "INPUT_OBJECT"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "CampaignRecipient",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "upsertCampaignRecipients",
+          "description": null,
+          "args": [
+            {
+              "name": "inputs",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": null,
+                  "kind": "LIST"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": null,
+              "kind": "LIST"
+            }
+          }
+        },
+        {
+          "name": "deleteCampaignRecipient",
+          "description": null,
+          "args": [
+            {
+              "name": "campaignRecipientId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "createOpportunity",
+          "description": null,
+          "args": [
+            {
+              "name": "input",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "CreateOpportunityInput",
+                  "kind": "INPUT_OBJECT"
+                }
+              }
+            },
+            {
+              "name": "workspaceId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Opportunity",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "updateOpportunity",
+          "description": null,
+          "args": [
+            {
+              "name": "input",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "UpdateOpportunityInput",
+                  "kind": "INPUT_OBJECT"
+                }
+              }
+            },
+            {
+              "name": "workspaceId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Opportunity",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "appendActionToLinkedOpportunities",
+          "description": null,
+          "args": [
+            {
+              "name": "workspaceId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "meetingExternalId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "String",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "actionId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Int",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "createAccountActivity",
+          "description": null,
+          "args": [
+            {
+              "name": "workspaceId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "input",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "CreateAccountActivityInput",
+                  "kind": "INPUT_OBJECT"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "AccountActivity",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "createCrmSignal",
+          "description": null,
+          "args": [
+            {
+              "name": "workspaceId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "input",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "CreateCrmSignalInput",
+                  "kind": "INPUT_OBJECT"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Signal",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "linkEmailTouchpointToAccount",
+          "description": null,
+          "args": [
+            {
+              "name": "accountId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "input",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "LinkEmailTouchpointInput",
+                  "kind": "INPUT_OBJECT"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Touchpoint",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "linkEmailTouchpointToOpportunity",
+          "description": null,
+          "args": [
+            {
+              "name": "opportunityId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "input",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "LinkEmailTouchpointInput",
+                  "kind": "INPUT_OBJECT"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Touchpoint",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "linkMeetingTouchpointToAccount",
+          "description": null,
+          "args": [
+            {
+              "name": "accountId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "meetingExternalId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "contextSource",
+              "type": {
+                "name": "TouchpointContextSource",
+                "kind": "ENUM",
+                "ofType": null
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Touchpoint",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "linkMeetingTouchpointToOpportunity",
+          "description": null,
+          "args": [
+            {
+              "name": "opportunityId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "meetingExternalId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "contextSource",
+              "type": {
+                "name": "TouchpointContextSource",
+                "kind": "ENUM",
+                "ofType": null
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Touchpoint",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "createCrmAssociation",
+          "description": null,
+          "args": [
+            {
+              "name": "input",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "CreateCRMAssociationInput",
+                  "kind": "INPUT_OBJECT"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "CRMAssociation",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
           "name": "createScheduledMailMessage",
           "description": "Create a scheduled mail message to be sent at a specified time.\nThe message will be stored and processed by the scheduled mail processor.\n\n**Access:** Requires authenticated user. User must have valid mail provider credentials.\n\n**Errors:**\n- User is not logged in\n- Access denied - If the user does not own the specified email address.",
           "args": [
@@ -8450,6 +11233,22 @@
             },
             {
               "name": "customTitle",
+              "type": {
+                "name": "String",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "dealHealthScore",
+              "type": {
+                "name": "Float",
+                "kind": "SCALAR",
+                "ofType": null
+              }
+            },
+            {
+              "name": "dealHealthLevel",
               "type": {
                 "name": "String",
                 "kind": "SCALAR",
@@ -8756,6 +11555,14 @@
                 "kind": "ENUM",
                 "ofType": null
               }
+            },
+            {
+              "name": "archived",
+              "type": {
+                "name": "Boolean",
+                "kind": "SCALAR",
+                "ofType": null
+              }
             }
           ],
           "type": {
@@ -8790,532 +11597,17 @@
           }
         },
         {
-          "name": "createDashboardWidget",
-          "description": "Creates a new dashboard widget with specified configuration.\nCommon configurations by widget type:  \n1. Chart Widgets (Bar/Line/Pie):\n- Set chartType, XAxis, YAxis\n- Configure grouping and aggregation\n- Set up color schemes\n- Use these types of widgets when asked to show something broken down by project, assignee, etc.\n\n2. List Widgets (Actions/Projects):\n- Define filters (status, assignee, etc.)\n- Set up sorting and grouping\n- Configure display options\n- When user asks to create a widget for all actions assigned to them, create a widget with type 'myActionsList'\n- Use these types of widgets when asked to show something in a list format, like actions, projects, etc.\n\n3. Status Widgets:\n- Specify project or goal\n- Configure metrics to display\n- Set up refresh intervals\n\n4. Custom Widgets:\n- Set up embedded content\n- Configure interactive elements\n- Define data sources    \n\nWhen asked to show something over time, use binBy and binByDateRange parameters.",
+          "name": "createDashboardWidgetV2",
+          "description": "Creates a new dashboard widget using a single input object.\nV2 replacement for createDashboardWidget \u2014 all fields are in CreateDashboardWidgetInput.",
           "args": [
             {
-              "name": "dashboardId",
-              "type": {
-                "name": "ID",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "containerId",
-              "type": {
-                "name": "ID",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "containerType",
-              "type": {
-                "name": "WidgetContainerType",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "type",
+              "name": "input",
               "type": {
                 "name": null,
                 "kind": "NON_NULL",
                 "ofType": {
-                  "name": "DashboardWidgetType",
-                  "kind": "ENUM"
-                }
-              }
-            },
-            {
-              "name": "title",
-              "type": {
-                "name": null,
-                "kind": "NON_NULL",
-                "ofType": {
-                  "name": "String",
-                  "kind": "SCALAR"
-                }
-              }
-            },
-            {
-              "name": "titleColor",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "titleSize",
-              "type": {
-                "name": "TextSize",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "fileIds",
-              "type": {
-                "name": null,
-                "kind": "LIST",
-                "ofType": {
-                  "name": null,
-                  "kind": "NON_NULL"
-                }
-              }
-            },
-            {
-              "name": "chartType",
-              "type": {
-                "name": "ChartType",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "sort",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "url",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "projectId",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "goalId",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "noteId",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "showTitles",
-              "type": {
-                "name": "Boolean",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "showLegend",
-              "type": {
-                "name": "Boolean",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "ignoreContainerFilter",
-              "type": {
-                "name": "Boolean",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "legendPosition",
-              "type": {
-                "name": "LegendPosition",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "showValueLabels",
-              "type": {
-                "name": "Boolean",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "showRowTotals",
-              "type": {
-                "name": "Boolean",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "showColumnTotals",
-              "type": {
-                "name": "Boolean",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "chartValuesState",
-              "type": {
-                "name": null,
-                "kind": "LIST",
-                "ofType": {
-                  "name": null,
-                  "kind": "NON_NULL"
-                }
-              }
-            },
-            {
-              "name": "showFlattenedData",
-              "type": {
-                "name": "Boolean",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "showLinkedToProject",
-              "type": {
-                "name": "Boolean",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "truncateLongNumbers",
-              "type": {
-                "name": "Boolean",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "displayGroupsAs",
-              "type": {
-                "name": "DisplayGroupsAs",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "timeUnitsType",
-              "type": {
-                "name": "TimeUnit",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "projectTreeLevelsToShow",
-              "type": {
-                "name": null,
-                "kind": "LIST",
-                "ofType": {
-                  "name": null,
-                  "kind": "NON_NULL"
-                }
-              }
-            },
-            {
-              "name": "isProjectTreeLevelActive",
-              "type": {
-                "name": "Boolean",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "reportOn",
-              "type": {
-                "name": "DashboardWidgetReportOn",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "XAxis",
-              "type": {
-                "name": "DashboardWidgetXAxis",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "XAxisCustomFieldId",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "XAxisTitle",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "YAxis",
-              "type": {
-                "name": "DashboardWidgetYAxis",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "YAxisCustomFieldId",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "YAxisTitle",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "YAxisGroupBy",
-              "type": {
-                "name": "DashboardWidgetYAxis",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "groupByCustomFieldId",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "chartValueColors",
-              "type": {
-                "name": null,
-                "kind": "LIST",
-                "ofType": {
-                  "name": null,
-                  "kind": "NON_NULL"
-                }
-              }
-            },
-            {
-              "name": "groupOthers",
-              "type": {
-                "name": "DashboardWidgetGroupOthersInput",
-                "kind": "INPUT_OBJECT",
-                "ofType": null
-              }
-            },
-            {
-              "name": "sectionHeaderText",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "sectionHeaderTextAlignment",
-              "type": {
-                "name": "TextAlignment",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "sectionHeaderLinePosition",
-              "type": {
-                "name": "SectionHeaderLinePosition",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "isHidden",
-              "type": {
-                "name": "Boolean",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "projectDetailsFields",
-              "type": {
-                "name": null,
-                "kind": "LIST",
-                "ofType": {
-                  "name": null,
-                  "kind": "NON_NULL"
-                }
-              }
-            },
-            {
-              "name": "contentTextAlignment",
-              "type": {
-                "name": "TextAlignment",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "contentTextSize",
-              "type": {
-                "name": "TextSize",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "contentTextColorPrimary",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "contentTextColorSecondary",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "workspaceId",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "overdueFilter",
-              "type": {
-                "name": "IncludeFilterType",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "recurringFilter",
-              "type": {
-                "name": "IncludeFilterType",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "completedDateRange",
-              "type": {
-                "name": "DateRangeFilterInput",
-                "kind": "INPUT_OBJECT",
-                "ofType": null
-              }
-            },
-            {
-              "name": "createdDateRange",
-              "type": {
-                "name": "DateRangeFilterInput",
-                "kind": "INPUT_OBJECT",
-                "ofType": null
-              }
-            },
-            {
-              "name": "dueDatesRange",
-              "type": {
-                "name": "DateRangeFilterInput",
-                "kind": "INPUT_OBJECT",
-                "ofType": null
-              }
-            },
-            {
-              "name": "projectDateRange",
-              "type": {
-                "name": "DateRangeFilterInput",
-                "kind": "INPUT_OBJECT",
-                "ofType": null
-              }
-            },
-            {
-              "name": "projectStatusDateRange",
-              "type": {
-                "name": "DateRangeFilterInput",
-                "kind": "INPUT_OBJECT",
-                "ofType": null
-              }
-            },
-            {
-              "name": "dateRange",
-              "type": {
-                "name": "DateRangeFilterInput",
-                "kind": "INPUT_OBJECT",
-                "ofType": null
-              }
-            },
-            {
-              "name": "colorThemeId",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "segmentColorOverrides",
-              "type": {
-                "name": null,
-                "kind": "LIST",
-                "ofType": {
-                  "name": null,
-                  "kind": "NON_NULL"
-                }
-              }
-            },
-            {
-              "name": "projectBudgetCategoryIds",
-              "type": {
-                "name": null,
-                "kind": "LIST",
-                "ofType": {
-                  "name": "String",
-                  "kind": "SCALAR"
-                }
-              }
-            },
-            {
-              "name": "projectBudgetDateRange",
-              "type": {
-                "name": null,
-                "kind": "LIST",
-                "ofType": {
-                  "name": null,
-                  "kind": "NON_NULL"
+                  "name": "CreateDashboardWidgetInput",
+                  "kind": "INPUT_OBJECT"
                 }
               }
             }
@@ -9330,497 +11622,17 @@
           }
         },
         {
-          "name": "updateDashboardWidget",
-          "description": "Updates an existing dashboard widget's configuration.\nCommon update scenarios:\n1. Changing visualization type\n2. Updating filters or data source\n3. Modifying appearance settings\n4. Adjusting metrics or calculations",
+          "name": "updateDashboardWidgetV2",
+          "description": "Updates an existing dashboard widget using a single input object.\nV2 replacement for updateDashboardWidget \u2014 all fields are in UpdateDashboardWidgetInput.",
           "args": [
             {
-              "name": "_id",
+              "name": "input",
               "type": {
                 "name": null,
                 "kind": "NON_NULL",
                 "ofType": {
-                  "name": "ID",
-                  "kind": "SCALAR"
-                }
-              }
-            },
-            {
-              "name": "title",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "titleColor",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "titleSize",
-              "type": {
-                "name": "TextSize",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "url",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "sort",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "type",
-              "type": {
-                "name": "DashboardWidgetType",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "chartType",
-              "type": {
-                "name": "ChartType",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "slateJson",
-              "type": {
-                "name": "JSONObject",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "XAxis",
-              "type": {
-                "name": "DashboardWidgetXAxis",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "XAxisCustomFieldId",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "XAxisTitle",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "YAxis",
-              "type": {
-                "name": "DashboardWidgetYAxis",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "YAxisCustomFieldId",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "YAxisTitle",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "YAxisGroupBy",
-              "type": {
-                "name": "DashboardWidgetYAxis",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "groupByCustomFieldId",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "fileIds",
-              "type": {
-                "name": null,
-                "kind": "LIST",
-                "ofType": {
-                  "name": null,
-                  "kind": "NON_NULL"
-                }
-              }
-            },
-            {
-              "name": "noteId",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "portfolioViewId",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "hideHeader",
-              "type": {
-                "name": "Boolean",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "goalId",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "showTitles",
-              "type": {
-                "name": "Boolean",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "showLegend",
-              "type": {
-                "name": "Boolean",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "ignoreContainerFilter",
-              "type": {
-                "name": "Boolean",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "legendPosition",
-              "type": {
-                "name": "LegendPosition",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "showValueLabels",
-              "type": {
-                "name": "Boolean",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "showRowTotals",
-              "type": {
-                "name": "Boolean",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "showColumnTotals",
-              "type": {
-                "name": "Boolean",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "showFlattenedData",
-              "type": {
-                "name": "Boolean",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "showLinkedToProject",
-              "type": {
-                "name": "Boolean",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "truncateLongNumbers",
-              "type": {
-                "name": "Boolean",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "displayGroupsAs",
-              "type": {
-                "name": "DisplayGroupsAs",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "displayGoalsBy",
-              "type": {
-                "name": "DisplayGoalsBy",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "timeUnitsType",
-              "type": {
-                "name": "TimeUnit",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "projectTreeLevelsToShow",
-              "type": {
-                "name": null,
-                "kind": "LIST",
-                "ofType": {
-                  "name": null,
-                  "kind": "NON_NULL"
-                }
-              }
-            },
-            {
-              "name": "isProjectTreeLevelActive",
-              "type": {
-                "name": "Boolean",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "reportOn",
-              "type": {
-                "name": "DashboardWidgetReportOn",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "chartValueColors",
-              "type": {
-                "name": null,
-                "kind": "LIST",
-                "ofType": {
-                  "name": null,
-                  "kind": "NON_NULL"
-                }
-              }
-            },
-            {
-              "name": "groupOthers",
-              "type": {
-                "name": "DashboardWidgetGroupOthersInput",
-                "kind": "INPUT_OBJECT",
-                "ofType": null
-              }
-            },
-            {
-              "name": "projectId",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "buttonLabel",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "sectionHeaderText",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "sectionHeaderTextAlignment",
-              "type": {
-                "name": "TextAlignment",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "sectionHeaderLinePosition",
-              "type": {
-                "name": "SectionHeaderLinePosition",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "isHidden",
-              "type": {
-                "name": "Boolean",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "projectDetailsFields",
-              "type": {
-                "name": null,
-                "kind": "LIST",
-                "ofType": {
-                  "name": null,
-                  "kind": "NON_NULL"
-                }
-              }
-            },
-            {
-              "name": "contentTextAlignment",
-              "type": {
-                "name": "TextAlignment",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "contentTextSize",
-              "type": {
-                "name": "TextSize",
-                "kind": "ENUM",
-                "ofType": null
-              }
-            },
-            {
-              "name": "contentTextColorPrimary",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "contentTextColorSecondary",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "workspaceId",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "containerId",
-              "type": {
-                "name": "ID",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "colorThemeId",
-              "type": {
-                "name": "String",
-                "kind": "SCALAR",
-                "ofType": null
-              }
-            },
-            {
-              "name": "segmentColorOverrides",
-              "type": {
-                "name": null,
-                "kind": "LIST",
-                "ofType": {
-                  "name": null,
-                  "kind": "NON_NULL"
-                }
-              }
-            },
-            {
-              "name": "projectBudgetCategoryIds",
-              "type": {
-                "name": null,
-                "kind": "LIST",
-                "ofType": {
-                  "name": "String",
-                  "kind": "SCALAR"
-                }
-              }
-            },
-            {
-              "name": "projectBudgetDateRange",
-              "type": {
-                "name": null,
-                "kind": "LIST",
-                "ofType": {
-                  "name": null,
-                  "kind": "NON_NULL"
-                }
-              }
-            },
-            {
-              "name": "chartValuesState",
-              "type": {
-                "name": null,
-                "kind": "LIST",
-                "ofType": {
-                  "name": null,
-                  "kind": "NON_NULL"
+                  "name": "UpdateDashboardWidgetInput",
+                  "kind": "INPUT_OBJECT"
                 }
               }
             }
@@ -10423,7 +12235,7 @@
         },
         {
           "name": "insertPost",
-          "description": "Creates a new news post.\n\nYou can also specify the category of the post and the attachment file id\nor even predefined reactions to post.\n\nAccess: Requires user access to the workspace\n\nExamples:\n{\n  \"body\": \"This is a <b>very exciting</b> news post\",\n  \"workspaceId\": \"7driFnaZjDQZndHqs\",\n  \"category\": \"news\"\n}",
+          "description": "Creates a new news post.\n\nYou can also specify the category of the post and the attachment file id\nor even predefined reactions to post.\n\nAccess: Requires user access to the workspace\n\nExamples:\n{\n  \"body\": \"This is a <b>very exciting</b> news post\",\n  \"workspaceId\": \"<workspaceId>\",\n  \"category\": \"news\"\n}",
           "args": [
             {
               "name": "_id",
@@ -10640,6 +12452,169 @@
           }
         },
         {
+          "name": "createMcpServer",
+          "description": "Create a new workspace-level MCP server connection.\nUse transportType 'streamable_http' for remote servers (requires url), or 'stdio' for local command-based servers (requires command).\nIMPORTANT: Before calling this, you MUST call discover_oauth_metadata first. If discovery returns success, set authType to 'oauth' and use the discovered oauthAuthorizationUrl, oauthTokenUrl, and oauthScopes. Only use authType 'headers' when discover_oauth_metadata fails.\nAfter creating with OAuth, inform the user to click the Authorize button to complete the OAuth consent flow.",
+          "args": [
+            {
+              "name": "workspaceId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "input",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "CreateMcpServerInput",
+                  "kind": "INPUT_OBJECT"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "McpServer",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "updateMcpServer",
+          "description": "Update an existing MCP server. Only the creator can update.",
+          "args": [
+            {
+              "name": "mcpServerId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "input",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "UpdateMcpServerInput",
+                  "kind": "INPUT_OBJECT"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "McpServer",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "deleteMcpServer",
+          "description": "Delete an MCP server. Only the creator can delete.",
+          "args": [
+            {
+              "name": "mcpServerId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "createHttpConnection",
+          "description": "Create a new HTTP connection in a workspace. Each connection becomes a tool named custom_http_{name} that Buzz can use to make authenticated API requests.\nIMPORTANT: The \"name\" must be snake_case (lowercase letters, numbers, underscores, starting with a letter, e.g. \"github_api\", \"stripe_api\"). It must be unique within the workspace.\nIMPORTANT: Before calling this, you MUST call discover_oauth_metadata first. If discovery returns success, set authType to 'oauth' and use the discovered oauthAuthorizationUrl, oauthTokenUrl, and oauthScopes. Only use authType 'headers' when discover_oauth_metadata fails.\nFor authType \"headers\", pass a \"headers\" object with auth credentials as key-value pairs (e.g. {\"Authorization\": \"Bearer sk-xxx\"}). Headers are encrypted at rest.\nSet sharingType to \"everyone\" for workspace-wide access, \"custom\" to share with specific users, or \"me\" (default) for personal use only.\nAfter creating, inform the user that the new tool (custom_http_{name}) will be available in their next conversation.",
+          "args": [
+            {
+              "name": "workspaceId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "input",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "CreateHttpConnectionInput",
+                  "kind": "INPUT_OBJECT"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": "HttpConnection",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
+          "name": "updateHttpConnection",
+          "description": "Update an existing HTTP connection by ID. Only the connection creator can update it.\nIf headers are provided, all existing headers are replaced with the new encrypted values.",
+          "args": [
+            {
+              "name": "id",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            },
+            {
+              "name": "input",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "UpdateHttpConnectionInput",
+                  "kind": "INPUT_OBJECT"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": "HttpConnection",
+            "kind": "OBJECT",
+            "ofType": null
+          }
+        },
+        {
           "name": "createBuzzCommand",
           "description": "Create a new slash command",
           "args": [
@@ -10706,6 +12681,131 @@
           "args": [
             {
               "name": "_id",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "createWebhook",
+          "description": "Create a new webhook. Admin-only.",
+          "args": [
+            {
+              "name": "input",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "CreateWebhookInput",
+                  "kind": "INPUT_OBJECT"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Webhook",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "updateWebhook",
+          "description": "Update an existing webhook. Admin-only.",
+          "args": [
+            {
+              "name": "input",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "UpdateWebhookInput",
+                  "kind": "INPUT_OBJECT"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Webhook",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "deleteWebhook",
+          "description": "Soft-delete a webhook. Admin-only.",
+          "args": [
+            {
+              "name": "webhookId",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "ID",
+                  "kind": "SCALAR"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "Boolean",
+              "kind": "SCALAR"
+            }
+          }
+        },
+        {
+          "name": "createBuzzEventWebhook",
+          "description": "Create an ephemeral internal webhook for Buzz event-based waits.\nService-only: requires x-requestor-shared-secret.",
+          "args": [
+            {
+              "name": "input",
+              "type": {
+                "name": null,
+                "kind": "NON_NULL",
+                "ofType": {
+                  "name": "CreateBuzzEventWebhookInput",
+                  "kind": "INPUT_OBJECT"
+                }
+              }
+            }
+          ],
+          "type": {
+            "name": null,
+            "kind": "NON_NULL",
+            "ofType": {
+              "name": "CreateBuzzEventWebhookResult",
+              "kind": "OBJECT"
+            }
+          }
+        },
+        {
+          "name": "deleteBuzzEventWebhook",
+          "description": "Soft-delete an internal Buzz event webhook.\nService-only: requires x-requestor-shared-secret.",
+          "args": [
+            {
+              "name": "webhookId",
               "type": {
                 "name": null,
                 "kind": "NON_NULL",
