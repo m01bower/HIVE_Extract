@@ -47,7 +47,7 @@ manual_tabs: [ALL_2020, ..., ALL_2026]     # pasted manually today
 | 10. Integrations | 305 – 354 | INT-001..008, API-001 |
 | 11. Testing methodology | 355 – 372 | — |
 | 12. Current decisions | 373 – 386 | DEC-001..009 |
-| 13. Open questions | 387 – 394 | OPEN-001..006 |
+| 13. Open questions | 387 – 395 | OPEN-001..007 |
 
 **To find an ID:** `grep -n "AUTH-002" docs/PRDSPDUX.md` (or whichever ID) gives the line; then `Read offset=N limit=10`. IDs survive line drift; the line-range column is for whole-section reads.
 
@@ -294,12 +294,12 @@ Scheduler row points at `client_key=LSC`, `tool_key=hive_extract`. Materializes 
 
 ## 9. Auth flow (SA / DWD / OAuth)
 
-Decision tree, implemented in `_shared_config/integrations/sa_policy.prefer_oauth_for(client_key)`:
+Decision tree, implemented in `_shared_config/integrations/sa_policy.prefer_oauth_for(client_key)`. **All credential material is loaded from OS keyring, not files** (STD-017; nightly cron wipes any `*.json` under `_shared_config/clients/`).
 
-- **AUTH-001 · SA load:** SA key from `_shared_config/clients/BosOpt/credentials.json` (BosOpt-owned).
-- **AUTH-002 · DWD impersonation path:** if `client_config.client.sa_email_impersonation` is set, the SA assumes that identity via Google Domain-Wide Delegation. How ELW / BHCP access *their* finance@ Drive without sharing files with the SA directly. **Not used by LSC today** (LSC SA-direct).
+- **AUTH-001 · SA load:** SA private key JSON read from keyring `MasterConfig / BosOpt_service_account_json`. Passed into `service_account.Credentials.from_service_account_info(json.loads(value), scopes=...)` — Google library accepts dict directly, no tempfile needed.
+- **AUTH-002 · DWD impersonation path:** if `client_config.client.sa_email_impersonation` is set, the SA assumes that identity via Google Domain-Wide Delegation (`with_subject(email)` on the SA creds object). How ELW / BHCP access *their* finance@ Drive without sharing files with the SA directly. **Not used by LSC today** (LSC SA-direct).
 - **AUTH-003 · SA-direct path:** if `client_key in sa_policy.SA_APPROVED_CLIENTS`, the SA accesses the target sheet via direct share (sheet's "Share" dialog includes `bosopt-automations@…`). LSC is on this list.
-- **AUTH-004 · OAuth fallback:** if neither applies, the code falls back to user OAuth (BosOpt credentials at `_shared_config/clients/BosOpt/{credentials,token}.json`). Last resort; works on any sheet Michael can see.
+- **AUTH-004 · OAuth fallback:** if neither applies, falls back to user OAuth. Both the OAuth client config (`MasterConfig / BosOpt_oauth_client_json`) and the user token (`MasterConfig / BosOpt_oauth_token_json`) come from keyring. `Credentials.from_authorized_user_info(json.loads(token_value), scopes=...)`. On refresh, the helper writes the new token JSON back to keyring; **the helper never writes a file**. Last-resort path; rarely exercised.
 - **AUTH-005 · Hive API key:** independent of the SA/DWD/OAuth tree above. Read `BosOpt / Hive-APIKey` from OS keyring; send as `Authorization: Bearer …` (REST) or `api_key` header (GraphQL). Same key for every `--client`.
 
 ## 10. Integrations
@@ -392,3 +392,4 @@ Future work: extract aggregation logic into a pure function and pytest it offlin
 - **OPEN-004 · WCR retired the HIVE chain** (2026-05-12); however the `runner.py:939-943` block may still hold portal-API-key wiring even though the chain is dead. Cleanup planned. Not a blocker.
 - **OPEN-005 · Promote ClientPortal's `--all-tab` choice to a portal param?** Today it's hardcoded to `prod`. If we ever want to run a `test` parity job from the portal (e.g. before a schema change), the portal route would need to accept and forward the flag. Low priority.
 - **OPEN-006 · Pytest-able aggregation.** `get_enriched_monthly_entries` lives in `hive_service.py` and mixes API calls with aggregation logic. Splitting the aggregation into a pure function would let us unit-test the `_consistency_check` invariant offline. Tracked as future work.
+- **OPEN-007 · Verify zero JSON credentials on disk.** After the 2026-05-13 migration (keyring is now the canonical source for all credential material — AUTH-001..005), confirm no path in HIVE_Extract or any shared module imports `credentials.json`, `token.json`, or `service_account.json` from disk. Nightly EXT cron will catch leaks; failure to load auth on a fresh clone is the symptom of an unmigrated code path. Re-verify after every release.

@@ -56,19 +56,22 @@ No per-tenant code paths — all tenant-specific behavior is data-driven from Ma
 
 None. This is a one-shot CLI; no HTTP server, no OAuth user flow, no callbacks. The OAuth fallback path uses pre-issued tokens (no interactive prompts on server).
 
-## Primary config files
+## Primary config sources
 
-| File | What lives there |
-|---|---|
-| `src/config.py` | `EXTRACTS`, `TABS`, `COLUMN_ORDER`, `EXCLUDED_PROJECTS_*`, `CHECKS_TAB`, Hive API URLs |
-| `src/settings.py` | Path helpers for `_shared_config/`, keyring access for Hive API key |
-| `_shared_config/clients/BosOpt/credentials.json` | OAuth fallback credentials (BosOpt) |
-| `_shared_config/clients/BosOpt/token.json` | OAuth fallback token (BosOpt) |
-| `_shared_config/apps/HIVE_Extract/settings.json` | Non-secret app-level settings |
-| MasterConfig sheet | Per-client: workspace_id, user_id, sheet IDs, webhook URLs, sa_email_impersonation |
-| OS keyring `BosOpt / Hive-APIKey` | Hive API key (only secret) |
+**ALL secrets live in OS keyring.** No JSON credential files on disk. A nightly cron on the EXT drive wipes `*.json` under `_shared_config/clients/` and `_shared_config/qbo_tokens/`, so any code path that depends on a file will be broken by morning.
 
-**No `config/` directory in this repo** — all config is in `_shared_config/` or keyring (BosOpt-wide rule).
+| Source | What lives there | Notes |
+|---|---|---|
+| OS keyring `BosOpt / Hive-APIKey` | Hive API key | The only Hive-specific secret. Same key for every `--client`. |
+| OS keyring `MasterConfig / BosOpt_service_account_json` | SA private key JSON (whole file content as one keyring value) | Loaded via `service_account.Credentials.from_service_account_info()` — no tempfile needed; the Google library accepts dict. |
+| OS keyring `MasterConfig / BosOpt_oauth_client_json` | OAuth client config (client_id, client_secret, redirect URIs) — used for the BosOpt OAuth fallback path | Rarely used (only when SA + DWD + SA-direct all fail). |
+| OS keyring `MasterConfig / BosOpt_oauth_token_json` | OAuth refresh + access token for the BosOpt user | Loaded via `Credentials.from_authorized_user_info()`. On refresh, the helper writes the updated token JSON back to keyring; **never to a file**. |
+| OS keyring `MasterConfig / {client}_<...>` | Auto-digested per-client secrets (Slack tokens, Chat webhooks, etc.) | Standard `{ClientName}_{field}` naming per STD-017. |
+| MasterConfig sheet | Per-client non-secret config: workspace_id, user_id, sheet IDs, webhook URLs (non-secret bits), sa_email_impersonation | Read via `_shared_config/config_reader.py`. |
+| `src/config.py` | `EXTRACTS`, `TABS`, `COLUMN_ORDER`, `EXCLUDED_PROJECTS_*`, `CHECKS_TAB`, Hive API URLs | Code — not config. |
+| `src/settings.py` | Path helpers for `_shared_config/`, keyring access for Hive API key | Code. |
+
+**No `config/` directory in this repo. No JSON credential files anywhere — including `_shared_config/clients/{Client}/{credentials,token,service_account}.json`.** All BosOpt-wide per STD-017. The desktop keyring AND the server keyring both hold the canonical values; the server's hourly `/opt/backups/backup-keyring.sh` cron is the durable backup. Any JSON credential file that appears on disk is treated as a leak and wiped by the EXT nightly cron.
 
 ## Schemas and contracts
 
