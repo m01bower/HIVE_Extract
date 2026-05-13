@@ -90,8 +90,8 @@ Three contracts other code depends on:
 
 ## Open-question caveats
 
-- Three copies of `hive_service.py` historically existed across projects (LSC_PrepTimesheets, WCR, HIVE_Extract). HIVE_Extract is the canonical home; sibling copies should be removed if still present. Cross-check before assuming any specific behavior.
-- Yearly tabs (`ALL_2020..ALL_2026`) are NOT written by code today — they are pasted manually by the user. The `--all-tab=prod` flow replaces the live `All` tab's LET formula but does not yet write the yearly tabs. Tracked in `docs/PRDSPDUX.md` → "Open questions".
+- Three copies of `hive_service.py` historically existed across projects (LSC_PrepTimesheets, WCR, HIVE_Extract). HIVE_Extract is the canonical home; sibling copies should be removed if still present. Cross-check before assuming any specific behavior. See `OPEN-003`.
+- Yearly tabs (`ALL_2020..ALL_2026`) — **retired 2026-05-13**. Code owns yearly aggregation via the `All` tab (DEC-002/DEC-007). Legacy yearly tabs are hidden in the sheet, pending deletion. See `OPEN-001` (resolved).
 
 ## Verification
 

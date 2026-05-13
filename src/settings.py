@@ -96,23 +96,3 @@ def ensure_config_dir() -> Path:
     """Ensure the app config directory exists and return its path."""
     _SHARED_APP_DIR.mkdir(parents=True, exist_ok=True)
     return _SHARED_APP_DIR
-
-
-def get_credentials_path(credential_ref: str = "BosOpt") -> Path:
-    """Get the credentials.json file path for Google OAuth.
-
-    Args:
-        credential_ref: Client folder name. Defaults to BosOpt (shared Google auth).
-                       Only override via google_auth_override in MasterConfig.
-    """
-    return SHARED_CONFIG_DIR / "clients" / credential_ref / "credentials.json"
-
-
-def get_token_path(credential_ref: str = "BosOpt") -> Path:
-    """Get the token.json file path for Google OAuth.
-
-    Args:
-        credential_ref: Client folder name. Defaults to BosOpt (shared Google auth).
-                       Only override via google_auth_override in MasterConfig.
-    """
-    return SHARED_CONFIG_DIR / "clients" / credential_ref / "token.json"

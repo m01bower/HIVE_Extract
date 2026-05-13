@@ -31,7 +31,7 @@ This file adds repo-specific guardrails on top.
 | Integrations list (Hive REST/GraphQL, Sheets, Chat, portal, scheduler) | `docs/PRDSPDUX.md` | INT-001..008 |
 | Architectural decisions (why X is the way it is) | `docs/PRDSPDUX.md` | DEC-001..009 |
 | Cross-app dependents (LSC_PrepTimesheets, WCR read our sheets) | `../APP_REGISTRY.md` | HIVE_Extract row + Cross-app section |
-| Open issues (Michael Cole gap, yearly tabs, hive_service copies) | `docs/PRDSPDUX.md` | OPEN-001..006 |
+| Open issues (resolved + current) | `docs/PRDSPDUX.md` | OPEN-001..007 |
 | 2026-04-22 Hive API discrepancy incident | `hive_api_data_discrepancy_report.md` | (whole file) |
 | Historical / pre-collapse docs | `_archive/` | (preserved for reference, not current) |
 
@@ -86,23 +86,11 @@ Before touching auth, tenant resolution, app routing, environment config, schema
 
 ## OAuth / auth safety rules
 
-This app uses **service-account auth via the `bosopt-automations` SA** with optional DWD impersonation, plus a Hive API key in keyring. Never copy auth assumptions from a sibling app — verify against `APP_IDENTITY.md`.
-
-- Never call `Credentials.from_authorized_user_file(path, scopes)` with a scopes argument — passing scopes strips other apps' authorities from the shared token (standing BosOpt rule; see memory `feedback_never_pass_scopes_token_load.md`).
-- The Hive API key lives in OS keyring under `BosOpt / Hive-APIKey` — never in config files.
-- LSC is the only current `--client` value. Other clients ignored until added to `bosopt-automations` SA approval policy.
-- See `APP_IDENTITY.md` for the SA / DWD / OAuth-fallback decision tree (handled by `_shared_config/integrations/sa_policy.prefer_oauth_for()`).
+Auth pattern: see `AUTH-001..005` and `APP_IDENTITY.md` → "OAuth / auth pattern". Standing global rule: never pass `scopes=` to `Credentials.from_authorized_user_file` (strips other apps' authorities from the shared token).
 
 ## Cross-app safety
 
-Two downstream apps consume HIVE_Extract output by reading the sheets we write:
-
-- **LSC_PrepTimesheets** reads `MonthEXACT_RAW`.
-- **WeeklyClientReview** reads `MonthEXACT_RAW` (+ `Client Review Hours` derived from it).
-
-Changes to the schema of `MonthEXACT_RAW` (column order, headers, date format) MUST be communicated as cross-app changes. See `../APP_REGISTRY.md` for the canonical map.
-
-The portal subprocess-launches this tool via `--client LSC --json` and reads `---JSON_RESULT---`. Never break the JSON contract without updating ClientPortal in the same commit.
+Downstream consumers and schema-coupling rules: see `APP_IDENTITY.md` → "Similar apps not to confuse with" and PRDSPDUX `§3` + `INT-006`. Never break the `API-001` JSON contract without updating ClientPortal in the same commit.
 
 ## PRDSPDUX update rule
 
@@ -110,19 +98,12 @@ The portal subprocess-launches this tool via `--client LSC --json` and reads `--
 
 ## Testing expectations
 
-- `tests/` contains comparison / validation scripts (`compare_test.py`, `compare_csv_endpoint.py`, `test_two_pass_archived.py`, `test_multi_year_gap.py`, etc.). These are integration-style — they hit real Hive and real Sheets. Run them on demand, not in CI.
-- Per the BosOpt-wide rule **"No Production Writes During Testing"**, never write to the production LSC Hive Data Sets sheet during test runs. Use `--client` with a non-prod config row, or `--no-sheets --excel` to write locally only.
+Test methodology: see PRDSPDUX `§11`. Honor the BosOpt-wide "No Production Writes During Testing" rule (use non-prod `--client` or `--no-sheets --excel`).
 
 ## No secret handling
 
-- Hive API key in keyring (`BosOpt / Hive-APIKey`); never in files.
-- All other config (workspace_id, user_id, sheet IDs, webhook URLs) is in MasterConfig — non-secret, read via `_shared_config/config_reader.py`.
-- `_shared_config/apps/HIVE_Extract/settings.json` may hold non-secret runtime preferences; never secrets.
+Secret storage: see `AUTH-005` and `APP_IDENTITY.md` → "Primary config sources". Keyring only; **no JSON credential files on disk** (global hard rule — see `Projects/CLAUDE.md` STD-019).
 
 ## Repo conventions
 
-- Standalone subprocess: `python src/main.py [mode] [flags]`. Exits when done; no long-running process.
-- `--json` flag emits a `---JSON_RESULT---` marker followed by structured JSON for portal / scheduler consumption. Schema documented in `docs/PRDSPDUX.md` → "Integrations → Portal JSON contract".
-- Dual-OS venvs (`venv-win/`, `venv-linux/`) per the BosOpt template.
-- No `config/` directory in this repo. All shared config under `_shared_config/`.
-- `_archive/` holds superseded docs (PROJECT_BRIEF, original spec) — historical reference only, not current state.
+Repo shape: standalone subprocess (`python src/main.py`), `--json` emits `---JSON_RESULT---` (schema in `API-001`), dual-OS venvs per BosOpt template, no `config/` directory, `_archive/` is historical only.

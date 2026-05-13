@@ -33,6 +33,8 @@ manual_tabs: [ALL_2020, ..., ALL_2026]     # pasted manually today
 
 ## Contents
 
+*Line numbers may drift after edits. Grep for the stable ID is the authoritative lookup; the line column is for whole-section reads only.*
+
 | Section | Lines | Primary IDs defined |
 |---|---|---|
 | 1. Product overview | 58 – 72 | — |
@@ -380,16 +382,16 @@ Future work: extract aggregation logic into a pure function and pytest it offlin
 | DEC-004 | **All tab clear range `A4:AZ50000`** | The legacy LET formula spilled wide; clearing wide guarantees no orphan cells survive the cutover. |
 | DEC-005 | **Modes collapsed to {all, projects}** (2026-05-13) | `monthexact` was a subset of `all`; `hive_report` was a special case of "fetch + aggregate" now folded into `all + --all-tab=prod`. Cleaner CLI, fewer cross-app trip-hazards. Cross-app callers (Scheduler, ClientPortal) updated in the same change set. |
 | DEC-006 | **`--all-tab=skip` by default in CLI; `prod` from portal** | Local CLI use is mostly debugging where you don't want to overwrite production. Portal use is always "do the real thing". The default is explicit on the portal side. |
-| DEC-007 | **No code writes to `ALL_YYYY`** | Yearly tabs depend on a known-bad Hive endpoint. User pastes manually until Hive fixes the endpoint or we re-derive from time entries. See §13. |
+| DEC-007 | **`ALL_YYYY` tabs retired** (2026-05-13) | Code now owns the `All` tab end-to-end via `get_enriched_monthly_entries` (DEC-002). The legacy `ALL_2020..ALL_2026` tabs were hidden 2026-05-13 and are scheduled for deletion after the parity period. No code writes to them; the user no longer pastes Hive UI exports. |
 | DEC-008 | **`_consistency_check` non-blocking** | A FAIL is visible (log + chat + JSON) but doesn't block the write. The All tab is still useful even if drift exists; aborting on FAIL would hide *all* data, not just the drifty subset. |
 | DEC-009 | **30-second sleep before reading `Checks!A3`** | Sheets recalc lag after bulk writes is real; shorter waits gave false `#REF!`/stale reads. 30s is conservative but reliable. |
 
 ## 13. Open questions
 
-- **OPEN-001 · Yearly `ALL_YYYY` tabs.** Hive's `getTimesheetReportingCsvExportData` returns wrong data, so we cannot derive these from the CSV export. **Option A:** wait for Hive (open ticket, no progress as of last check). **Option B:** derive from `all_daily_entries` by year-bucketing — same data path as the `All` tab, just sliced differently. Option B is what the user would want; tracked in memory `hive_all_tab_redesign.md` as a follow-up to the 2026-05-13 cutover.
-- **OPEN-002 · Michael Cole residual gap (−37.95 hrs).** As of 2026-04-22, after the two-pass fix, one user shows a small persistent gap vs ground truth. Escalated to Hive — likely a Hive-side data anomaly, not our extraction. Re-check periodically; close if Hive confirms.
+- **OPEN-001 (resolved 2026-05-13) · Yearly `ALL_YYYY` tabs retired.** The 2026-05-13 All-tab redesign (DEC-002) made code the owner of `All!A4+`, derived from `all_daily_entries`. The legacy yearly tabs are no longer written, no longer pasted, and hidden in the sheet pending deletion. See DEC-007.
+- **OPEN-002 (resolved 2026-05-13) · Michael Cole residual gap closed.** The two-pass archived fetch (DEC-003, RULE-004) landed 2026-04-22 and was the Hive-recommended fix. Production runs on 2026-05-13 show `Checks: ALL GOOD` and `_consistency_check` drift of `+0.00h`. User confirmed 2026-05-13. Re-open only if a future run surfaces a Cole-specific shortage vs the Hive UI export.
 - **OPEN-003 · Three copies of `hive_service.py`.** Historically `LSC_PrepTimesheets`, `WeeklyClientReview`, and `HIVE_Extract` each had their own copy. Per DEC-001 (sole owner), HIVE_Extract is canonical. Audit + remove sibling copies if still present. Tracked in memory `hive_extract.md`.
 - **OPEN-004 · WCR retired the HIVE chain** (2026-05-12); however the `runner.py:939-943` block may still hold portal-API-key wiring even though the chain is dead. Cleanup planned. Not a blocker.
 - **OPEN-005 · Promote ClientPortal's `--all-tab` choice to a portal param?** Today it's hardcoded to `prod`. If we ever want to run a `test` parity job from the portal (e.g. before a schema change), the portal route would need to accept and forward the flag. Low priority.
 - **OPEN-006 · Pytest-able aggregation.** `get_enriched_monthly_entries` lives in `hive_service.py` and mixes API calls with aggregation logic. Splitting the aggregation into a pure function would let us unit-test the `_consistency_check` invariant offline. Tracked as future work.
-- **OPEN-007 · Verify zero JSON credentials on disk.** After the 2026-05-13 migration (keyring is now the canonical source for all credential material — AUTH-001..005), confirm no path in HIVE_Extract or any shared module imports `credentials.json`, `token.json`, or `service_account.json` from disk. Nightly EXT cron will catch leaks; failure to load auth on a fresh clone is the symptom of an unmigrated code path. Re-verify after every release.
+- **OPEN-007 (resolved 2026-05-13) · Zero JSON credentials on disk for this app.** `src/download_drive_file.py` (sole consumer of an on-disk OAuth token) deleted; `get_credentials_path()` and `get_token_path()` removed from `src/settings.py`. `grep -rn "credentials\.json\|token\.json\|service_account\.json"` over `src/` returns no hits. AUTH-001..005 (keyring) is the only credential surface in HIVE_Extract. Standing rule: **no JSON credential files on disk, period.** See feedback memory `feedback_no_json_credentials_on_disk.md`.

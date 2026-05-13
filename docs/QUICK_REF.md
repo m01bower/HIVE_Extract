@@ -70,8 +70,9 @@ Date defaults: today − 45 days through today. The `--all-tab≠skip` fetch wid
 | MasterConfig "Sheets" tab | `hive_extract_sheet_id` per client | TEN-002 |
 | MasterConfig "Notifications" tab | `google_chat_webhook` per client | INT-005 |
 | MasterConfig "Clients" tab | `sa_email_impersonation` (DWD target if any) | AUTH-002 |
-| `_shared_config/clients/BosOpt/credentials.json` | SA key (AUTH-001) + OAuth fallback (AUTH-004) | AUTH-001, AUTH-004 |
-| `_shared_config/clients/BosOpt/token.json` | OAuth fallback token | AUTH-004 |
+| OS keyring `MasterConfig / BosOpt_service_account_json` | SA private key JSON (whole file as one keyring value; `from_service_account_info(dict)`) | AUTH-001 |
+| OS keyring `MasterConfig / BosOpt_oauth_client_json` | OAuth client config (OAuth fallback only) | AUTH-004 |
+| OS keyring `MasterConfig / BosOpt_oauth_token_json` | OAuth refresh+access token (OAuth fallback only; refresh writes back to keyring, never to disk) | AUTH-004 |
 | `_shared_config/apps/HIVE_Extract/settings.json` | Non-secret app prefs | — |
 
 **SA / DWD / OAuth decision lives in** `_shared_config/integrations/sa_policy.py::prefer_oauth_for()`. LSC = SA direct-share (AUTH-003 — in `SA_APPROVED_CLIENTS`), no DWD impersonation.
@@ -115,13 +116,12 @@ JSON contract from CLI (post `---JSON_RESULT---` marker):
 | `src/settings.py` | Keyring access, `_shared_config/` path helpers |
 | `src/notification.py` | Google Chat post-run webhook |
 
-## Known gotchas (5)
+## Known gotchas (4)
 
-1. **Two-pass archived fetch** (RULE-004, DEC-003). Hive's GraphQL with `archived:null` returns inconsistent results — code does two explicit passes (`archived:false` then `archived:true`) and concatenates. Fixed 2026-04-22 after a data gap.
+1. **Two-pass archived fetch** (RULE-004, DEC-003). Hive's GraphQL with `archived:null` returns inconsistent results — code does two explicit passes (`archived:false` then `archived:true`) and concatenates. Fixed 2026-04-22; closed the prior Michael Cole gap (OPEN-002 resolved 2026-05-13).
 2. **`Month` tab is a formula, not code-written.** `=FILTER(All!A5:Z, ...)` — refreshes automatically when `All` changes. Do not write to `Month` from code.
-3. **`ALL_YYYY` tabs are pasted manually** (DEC-007, OPEN-001). Code does not write them yet.
+3. **`ALL_YYYY` tabs are retired** (DEC-007, OPEN-001 resolved 2026-05-13). The All-tab redesign (DEC-002) owns yearly aggregation; legacy yearly tabs are hidden in the sheet pending deletion. Code does not write them and the user no longer pastes them.
 4. **`Checks` tab read with 30s delay** (DEC-009). Sheets needs time to recalc after bulk writes. The `time.sleep(30)` before reading `Checks!A3` is intentional — don't shorten it.
-5. **Michael Cole residual gap (−37.95 hrs)** (OPEN-002) escalated to Hive as of 2026-04-22. Likely a Hive-side data issue, not our extraction. Re-check periodically.
 
 ## Run on server
 
